@@ -79,7 +79,13 @@ export const assets = {
     profile_icon,
     logout_icon,
     bag_icon,
-    parcel_icon
+    parcel_icon,
+    menu_1,
+    menu_2,
+    menu_3,
+    menu_4,
+    menu_5,
+    menu_8
 }
 
 export const menu_list = [

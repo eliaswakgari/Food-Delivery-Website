@@ -1,26 +1,31 @@
-const express = require('express');
-const multer = require('multer');
-const {addFood,listFood,removeFood} = require('../controllers/foodController.js');
+const express = require("express");
+const multer = require("multer");
+const path = require("path");
+const { addFood, listFood, removeFood } = require("../controllers/foodController");
+const authMiddleware = require("../middleware/auth");
+const requireRole = require("../middleware/role");
 
 const foodRouter = express.Router();
 
-// Configure multer storage
+// Configure multer for file uploads (images go to /uploads)
 const storage = multer.diskStorage({
-    destination: 'uploads', // Directory to store uploaded files
-    filename: (req, file, cb) => {
-             console.log(req.file);
-             
-       return cb(null, `${Date.now()}-${file.originalname}`); // Ensure the filename is unique
-    },
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, "../uploads"));
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + "-" + uniqueSuffix + ext);
+  },
 });
 
-// Initialize multer with the configured storage
-const upload = multer({ storage: storage,limits: { fileSize: 10 * 1024 * 1024 }});
+const upload = multer({ storage });
 
-// Define the route, ensure upload.single('image') is used as middleware
-foodRouter.post('/add', upload.single('image'), addFood);
-//route to find all list of foods
-foodRouter.get('/list',listFood)
-//route to delete food from database
-foodRouter.post('/remove',removeFood)
+// Public: list all food items
+foodRouter.get("/list", listFood);
+
+// Admin-only: add and remove food (e.g. for admin panel)
+foodRouter.post("/add", authMiddleware, requireRole("admin"), upload.single("image"), addFood);
+foodRouter.post("/remove", authMiddleware, requireRole("admin"), removeFood);
+
 module.exports = foodRouter;

@@ -9,6 +9,16 @@ const { trim } = require('validator')
          type:String,required:true,trim:true
 },cartData:{
          type:Object,default:{}
+},role:{
+        type:String,
+        enum:["user","admin"],
+        default:"user"
+},avatar:{
+        type:String
+},resetPasswordToken:{
+        type:String
+},resetPasswordExpires:{
+        type:Date
 }
 },{minimize:true})
 const userModel= mongoose.model('user',userSchema)

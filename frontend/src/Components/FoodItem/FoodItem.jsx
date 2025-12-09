@@ -1,35 +1,67 @@
-import React, { useContext} from 'react'
-import './FoodItem.css'
-import { assets } from '../../assets/assets'
-import { StoreContext } from '../../context/StoreContextProvider'
-const FoodItem = ({id,price,description,image,name}) => {
-        //  const [itemCount,setItemCount]=useState(0)
-         // console.log('not item count',!itemCount);
-         //falsy of integer is 0 (!itemCount=true=0)
-         const {cartItems,removeFromCart,addToCart,url}=useContext(StoreContext)
-         
-  return (
-     <div className="food-item">
-         <div className="food-item-img-container">
-         <img src={url+"/images/"+image} alt="" className="food-item-image" />
-         { !cartItems[id] /* !itemCount======= itemCount===0 */
-          ?<img className='add' onClick={()=>addToCart(id)} src={assets.add_icon_white} alt="" />
-          :<div className='food-item-counter'>
-                  <img onClick={()=>addToCart(id)} src={assets.remove_icon_red}alt="" />
-                  <p>{cartItems[id]}</p>
-                  <img onClick={()=>addToCart(id)} src={assets.add_icon_green} alt="" />
-         </div>}
-         </div>
-         <div className="food-item-info">
-         <div className="food-item-name-rating">
-         <p>{name}</p>
-         <img src={assets.rating_starts} alt="" />
-         </div>
-         <p className="food-item-desc">{description}</p>
-         <p className="food-item-price">${price}</p>
-         </div>
-     </div>
-  )
-}
+import React from "react";
+import "./FoodItem.css";
+import { useDispatch, useSelector } from "react-redux";
+import { addToCart, removeFromCart } from "../../store/cartSlice";
+import { API_BASE_URL } from "../../store/config";
 
-export default FoodItem
+const FoodItem = ({ id, name, description, price, image }) => {
+         const dispatch = useDispatch();
+         const cartItems = useSelector((state) => state.cart.cartItems) || {};
+         const role = useSelector((state) => state.auth.role);
+
+         const count = cartItems[id] || 0;
+         const imageSrc = image && (image.startsWith("http") ? image : `${API_BASE_URL}/images/${image}`);
+
+         const handleAdd = () => {
+                  if (role === "admin") {
+                           alert("Admin cannot order items only permitted to customers");
+                           return;
+                  }
+                  dispatch(addToCart(id));
+         };
+
+         const handleRemove = () => {
+                  if (count === 0) return;
+                  dispatch(removeFromCart(id));
+         };
+
+         return (
+                  <div className="food-item">
+                           <div className="food-item-img-container">
+                                    <img
+                                             src={imageSrc}
+                                             alt={name}
+                                             className="food-item-img"
+                                    />
+                                    {count > 0 && <div className="food-item-count">{count}</div>}
+                                    {name && <div className="food-item-name-badge">{name}</div>}
+
+                                    <div className="food-item-overlay">
+                                             <div className="food-item-overlay-content">
+                                                      <h3 className="food-item-overlay-title">{name}</h3>
+                                                      {description && (
+                                                               <p className="food-item-overlay-desc">{description}</p>
+                                                      )}
+                                                      <p className="food-item-overlay-meta">From ${price}</p>
+                                             </div>
+                                    </div>
+                           </div>
+                           <div className="food-item-info">
+                                    <div className="food-item-controls">
+                                             <button type="button" onClick={handleAdd}>
+                                                      Add
+                                             </button>
+                                             <button
+                                                      type="button"
+                                                      disabled={count === 0}
+                                                      onClick={handleRemove}
+                                             >
+                                                      Remove
+                                             </button>
+                                    </div>
+                           </div>
+                  </div>
+         );
+};
+
+export default FoodItem;

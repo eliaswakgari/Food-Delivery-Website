@@ -1,106 +1,157 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+import React, { useState } from "react";
 import "./Login.css";
-import { assets } from "../../assets/assets";
-import { useContext } from "react";
-import { StoreContext } from "../../context/StoreContextProvider";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import { API_BASE_URL } from "../../store/config";
+import { setCredentials } from "../../store/authSlice";
 
-const Login = ({ setShowLogin }) => {
-  const [currentState, setCurrentState] = useState("Sign Up");
-  const [data, setData] = useState({
-    name: "",
-    email: "",
-    password: "",
-  });
-  const { url, setToken } = useContext(StoreContext);
+const Login = () => {
+         const dispatch = useDispatch();
+         const navigate = useNavigate();
 
-  const onChangeHandler = (e) => {
-    const { name, value } = e.target;
-    setData((prevData) => ({ ...prevData, [name]: value }));
-  };
+         const [mode, setMode] = useState("login"); // "login" | "signup"
+         const [name, setName] = useState("");
+         const [email, setEmail] = useState("");
+         const [password, setPassword] = useState("");
+         const [loading, setLoading] = useState(false);
+         const [error, setError] = useState("");
 
-  const onLogin = async (e) => {
-    e.preventDefault();
-    try {
-      const endpoint = currentState === "Login" ? "/api/user/login" : "/api/user/register";
-      const response = await axios.post(`${url}${endpoint}`, data);
-      if (response.data.success) {
-        setToken(response.data.token);
-        localStorage.setItem("token", response.data.token);
-        setShowLogin(false);
-      } else {
-        alert(response.data.message);
-      }
-    } catch (error) {
-      console.error("Error during login/register:", error);
-      alert("An error occurred. Please try again.");
-    }
-  };
+         const handleSubmit = async (e) => {
+                  e.preventDefault();
+                  setError("");
+                  setLoading(true);
 
-  useEffect(() => {
-    console.log(data);
-  }, [data]);
+                  try {
+                           if (mode === "login") {
+                                    const res = await axios.post(`${API_BASE_URL}/api/user/login`, { email, password });
+                                    if (res.data && res.data.success && res.data.token) {
+                                             dispatch(
+                                                      setCredentials({
+                                                               token: res.data.token,
+                                                               role: res.data.role,
+                                                               user: res.data.user,
+                                                      })
+                                             );
+                                             if (res.data.role === "admin") {
+                                                      navigate("/admin");
+                                             } else {
+                                                      navigate("/");
+                                             }
+                                    } else if (res.data && res.data.success === false) {
+                                             setError(res.data.message || "Login failed");
+                                    } else {
+                                             setError("Unexpected response from server");
+                                    }
+                           } else {
+                                    const res = await axios.post(`${API_BASE_URL}/api/user/register`, {
+                                             name,
+                                             email,
+                                             password,
+                                    });
 
-  return (
-    <div className="login">
-      <form onSubmit={onLogin} className="login-container">
-        <div className="login-title">
-          <h2>{currentState === "Login" ? "Login" : "Sign Up"}</h2>
-          <img
-            onClick={() => setShowLogin(false)}
-            src={assets.cross_icon}
-            alt="Close"
-          />
-        </div>
-        <div className="login-inputs">
-          {currentState !== "Login" && (
-            <input
-              name="name"
-              onChange={onChangeHandler}
-              value={data.name}
-              type="text"
-              placeholder="Your name"
-              required
-            />
-          )}
-          <input
-            name="email"
-            onChange={onChangeHandler}
-            value={data.email}
-            type="email"
-            placeholder="Your email"
-            required
-          />
-          <input
-            name="password"
-            onChange={onChangeHandler}
-            value={data.password}
-            type="password"
-            placeholder="Password"
-            required
-          />
-        </div>
-        <button type="submit">
-          {currentState === "Sign Up" ? "Create Account" : "Login"}
-        </button>
-        <div className="login-condition">
-          <input type="checkbox" required />
-          <p>By continuing, I agree to the terms of use and privacy policy.</p>
-        </div>
-        {currentState === "Login" ? (
-          <p>
-            Create a New Account?{" "}
-            <span onClick={() => setCurrentState("Sign Up")}>Click here</span>
-          </p>
-        ) : (
-          <p>
-            Already have an Account?{" "}
-            <span onClick={() => setCurrentState("Login")}>Login here</span>
-          </p>
-        )}
-      </form>
-    </div>
-  );
+                                    if (res.data && res.data.success && res.data.token) {
+                                             dispatch(
+                                                      setCredentials({
+                                                               token: res.data.token,
+                                                               role: res.data.role,
+                                                               user: res.data.user,
+                                                      })
+                                             );
+                                             navigate("/");
+                                    } else if (res.data && res.data.success === false) {
+                                             setError(res.data.message || "Registration failed");
+                                    } else {
+                                             setError("Unexpected response from server");
+                                    }
+                           }
+                  } catch (err) {
+                           const backendMessage = err?.response?.data?.message;
+                           setError(backendMessage || "Server error during authentication");
+                  } finally {
+                           setLoading(false);
+                  }
+         };
+
+         const toggleMode = () => {
+                  setError("");
+                  setMode((prev) => (prev === "login" ? "signup" : "login"));
+         };
+
+         return (
+                  <div className="auth-container">
+                           <form className="auth-form" onSubmit={handleSubmit}>
+                                    <h2>{mode === "login" ? "Login" : "Sign Up"}</h2>
+
+                                    {mode === "signup" && (
+                                             <input
+                                                      type="text"
+                                                      placeholder="Name"
+                                                      value={name}
+                                                      onChange={(e) => setName(e.target.value)}
+                                                      required
+                                             />
+                                    )}
+
+                                    <input
+                                             type="email"
+                                             placeholder="Email"
+                                             value={email}
+                                             onChange={(e) => setEmail(e.target.value)}
+                                             required
+                                    />
+                                    <input
+                                             type="password"
+                                             placeholder="Password"
+                                             value={password}
+                                             onChange={(e) => setPassword(e.target.value)}
+                                             required
+                                    />
+
+                                    {error && <p className="auth-error">{error}</p>}
+
+                                    <button type="submit" disabled={loading}>
+                                             {loading
+                                                      ? mode === "login"
+                                                               ? "Logging in..."
+                                                               : "Signing up..."
+                                                      : mode === "login"
+                                                               ? "Login"
+                                                               : "Sign Up"}
+                                    </button>
+
+                                    <button
+                                             type="button"
+                                             className="auth-toggle"
+                                             onClick={toggleMode}
+                                    >
+                                             {mode === "login"
+                                                      ? "Don't have an account? Sign up"
+                                                      : "Already have an account? Login"}
+                                    </button>
+
+                                    <button
+                                             type="button"
+                                             className="auth-forgot"
+                                             onClick={() => navigate("/forgot-password")}
+                                    >
+                                             Forgot password?
+                                    </button>
+
+                                    <div className="auth-divider">
+                                             <span>OR</span>
+                                    </div>
+
+                                    <button
+                                             type="button"
+                                             className="auth-google"
+                                             onClick={() => alert("Google login requires Google OAuth setup. We can scaffold it next.")}
+                                    >
+                                             Continue with Google
+                                    </button>
+                           </form>
+                  </div>
+         );
 };
 
 export default Login;

@@ -1,0 +1,46 @@
+# Node modules
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-error.log*
+*.log
+
+# Build output
+dist/
+build/
+.next/
+out/
+.turbo/
+
+# Uploads / temp
+uploads/
+tmp/
+.cache/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE folders
+.vscode/
+.idea/
+.history/
+
+# Database
+*.sqlite
+*.db
+*.lock
+
+# Typescript
+*.tsbuildinfo
+
+# Misc
+coverage/

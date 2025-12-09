@@ -1,14 +1,30 @@
-.food-display{
-         margin-top: 30px;
+.food-display {
+         width: 100vw;
+         margin: 20px auto 0;
+         padding: 30px 4% 40px;
+         box-sizing: border-box;
+         /* App-themed colorful background behind cards */
+         background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 55%),
+                  radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.06), transparent 55%),
+                  linear-gradient(90deg, #4b53c7, #0deec8 40%, #c2410c 75%);
+         color: #fff;
 }
-.food-display h2{
+
+.food-display h2 {
          font-weight: 500;
-         font-size: max(2vw,24px);
+         font-size: max(2vw, 24px);
+         margin-bottom: 10px;
 }
-.food-display-list{
+
+.food-display-list {
+         max-width: 1200px;
+         margin: 30px auto 0;
          display: grid;
-         grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
-         margin-top: 30px;
+         grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
          gap: 30px;
          row-gap: 50px;
+         background-color: #f9fafb;
+         padding: 20px;
+         border-radius: 12px;
+         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
 }

@@ -1,0 +1,103 @@
+.orders-page {
+         max-width: 1200px;
+         margin: 40px auto;
+         padding: 0 4%;
+}
+
+.orders-list {
+         margin-top: 20px;
+         display: flex;
+         flex-direction: column;
+         gap: 16px;
+}
+
+.orders-card {
+         background-color: #ffffff;
+         border-radius: 12px;
+         border: 1px solid #e5e7eb;
+         padding: 16px 18px;
+}
+
+.orders-card-header {
+         display: flex;
+         justify-content: space-between;
+         align-items: center;
+         margin-bottom: 12px;
+}
+
+.orders-card-title {
+         font-weight: 600;
+}
+
+.orders-card-meta {
+         font-size: 0.8rem;
+         color: #6b7280;
+}
+
+.orders-card-status {
+         font-size: 0.85rem;
+         padding: 4px 10px;
+         border-radius: 999px;
+         background-color: #eff6ff;
+         color: #1d4ed8;
+}
+
+.orders-items {
+         margin-top: 12px;
+         border-top: 1px dashed #e5e7eb;
+         padding-top: 8px;
+}
+
+.orders-item-row {
+         display: grid;
+         grid-template-columns: 2fr auto auto;
+         font-size: 0.9rem;
+         padding-block: 2px;
+}
+
+/* Timeline */
+.orders-timeline {
+         display: flex;
+         align-items: center;
+         gap: 0.5rem;
+         margin-top: 8px;
+         margin-bottom: 4px;
+}
+
+.orders-timeline-step {
+         display: flex;
+         align-items: center;
+         gap: 0.25rem;
+}
+
+.orders-timeline-dot {
+         width: 8px;
+         height: 8px;
+         border-radius: 999px;
+         background-color: #d1d5db;
+}
+
+.orders-timeline-dot-active {
+         background-color: #22c55e;
+}
+
+.orders-timeline-label {
+         font-size: 0.75rem;
+         color: #9ca3af;
+}
+
+.orders-timeline-label-active {
+         color: #16a34a;
+}
+
+.orders-timeline-bar {
+         width: 26px;
+         height: 2px;
+         border-radius: 999px;
+         background-color: #e5e7eb;
+         margin-inline: 2px;
+}
+
+.orders-timeline-bar-active {
+         background-color: #22c55e;
+}

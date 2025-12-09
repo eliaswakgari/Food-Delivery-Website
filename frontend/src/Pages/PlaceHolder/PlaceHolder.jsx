@@ -1,12 +1,13 @@
-import React, { useContext, useState } from "react";
+import React, { useState } from "react";
 import "./PlaceHolder.css";
-//import { useNavigate } from "react-router-dom";
-import { StoreContext } from "../../context/StoreContextProvider";
 import axios from "axios";
+import { useSelector } from "react-redux";
+import { API_BASE_URL } from "../../store/config";
 
 const PlaceHolder = () => {
-  const { getTotalCartAmount, token, food_list, cartItems, url } =
-    useContext(StoreContext);
+  const token = useSelector((state) => state.auth.token);
+  const food_list = useSelector((state) => state.food.food_list) || [];
+  const cartItems = useSelector((state) => state.cart.cartItems) || {};
   const [data, setData] = useState({
     firstName: "",
     lastName: "",
@@ -23,14 +24,29 @@ const PlaceHolder = () => {
     const value = e.target.value;
     setData((data) => ({ ...data, [name]: value }));
   };
+
+  const getTotalCartAmount = () => {
+    let total = 0;
+    for (const id in cartItems) {
+      const item = food_list.find((f) => f._id === id);
+      if (item) {
+        total += item.price * cartItems[id];
+      }
+    }
+    return total;
+  };
+
   const placeOrder = async (e) => {
     e.preventDefault();
+    if (!token) {
+      alert("To proceed with payment, please login.");
+      return;
+    }
     //create order item
     let orderItems = [];
-    food_list.map((item) => {
+    food_list.forEach((item) => {
       if (cartItems[item._id] > 0) {
-        let itemInfo = item;
-        itemInfo["quantity"] = cartItems[item._id];
+        const itemInfo = { ...item, quantity: cartItems[item._id] };
         orderItems.push(itemInfo);
       }
     });
@@ -40,14 +56,21 @@ const PlaceHolder = () => {
       items: orderItems,
       amount: getTotalCartAmount(),
     };
-    let response = await axios.post(url + "/api/order/place", orderData, {
-      headers: { token },
-    });
-    if (response.data.success) {
-      const { session_url } = response.data;
-      window.location.replace(session_url);
-    } else {
-      alert("Error");
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/order/place`, orderData, {
+        headers: { token },
+      });
+
+      if (response.data.success) {
+        const { session_url } = response.data;
+        window.location.replace(session_url);
+      } else {
+        alert(response.data.message || "Payment could not be started. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error placing order:", err);
+      alert("Network or server error while starting payment. Please check your connection and try again.");
     }
   };
 

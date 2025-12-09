@@ -1,28 +1,46 @@
 import React from "react";
 import "./Explore.css";
-import { menu_list } from "../../assets/assets";
-const Explore = ({category,setCategory}) => {
-  return (
-    <div className="explore-menu" id="explore-menu">
-      <h1>Explore our menu</h1>
-      <p className="explore-menu-text">
-        Choose from a diverse menu featuring a delectable array of dishes.Our
-        mission is to satisfy your cravings and elevate your dining
-        experience,one delicious mea at a time.
-      </p>
-      <div className="explore-menu-list">
-        {menu_list.map((item, index) => {
-          return (
-            <div onClick={()=>setCategory(prev=>prev===item.menu_name?'All':item.menu_name)} className="explore-menu-list-item" key={index}>
-              <img className={category===item.menu_name?'active':""} src={item.menu_image} alt="" />
-              <p>{item.menu_name}</p>
-            </div>
-          );
-        })}
-      </div>
-      <hr />
-    </div>
-  );
+
+const Explore = ({ category, setCategory }) => {
+         const categories = [
+                  "All",
+                  "Pizza",
+                  "Burger",
+                  "Dessert",
+                  "Drinks",
+         ];
+
+         return (
+                  <div className="explore">
+                           <h2>Explore Our Menu</h2>
+                           {/* Desktop/tablet: pills */}
+                           <div className="explore-list">
+                                    {categories.map((cat) => (
+                                             <button
+                                                      key={cat}
+                                                      className={cat === category ? "active" : ""}
+                                                      onClick={() => setCategory(cat)}
+                                             >
+                                                      {cat}
+                                             </button>
+                                    ))}
+                           </div>
+
+                           {/* Mobile: dropdown */}
+                           <div className="explore-select-wrapper">
+                                    <select
+                                             value={category}
+                                             onChange={(e) => setCategory(e.target.value)}
+                                    >
+                                             {categories.map((cat) => (
+                                                      <option key={cat} value={cat}>
+                                                               {cat}
+                                                      </option>
+                                             ))}
+                                    </select>
+                           </div>
+                  </div>
+         );
 };
 
 export default Explore;

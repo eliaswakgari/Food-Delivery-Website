@@ -1,5 +1,15 @@
 const foodModel = require("../models/foodModel.js");
 const fs = require("fs");
+const cloudinary = require("cloudinary").v2;
+
+// Configure Cloudinary from environment variables if available
+if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+}
 
 const addFood = async (req, res) => {
     // Debugging: Log the entire request body and files
@@ -8,28 +18,48 @@ const addFood = async (req, res) => {
 
     // Check if file is uploaded
     if (!req.file) {
-             
-        return res.status(400).json({ error: 'No file uploaded' });
+        return res.status(400).json({ success:false, message: 'No image file uploaded' });
     }
+
     try {
-    const image_filename = req.file.filename;  // Get the uploaded file's filename
+        let imageUrl;
+        const hasCloudinaryConfig = !!(
+          process.env.CLOUDINARY_CLOUD_NAME &&
+          process.env.CLOUDINARY_API_KEY &&
+          process.env.CLOUDINARY_API_SECRET
+        );
 
-    // Create new food item
-    const food = new foodModel({
-        name: req.body.name,
-        description: req.body.description,
-        price: req.body.price,
-        category: req.body.category,
-        image: image_filename
-    });
+        if (hasCloudinaryConfig) {
+            // Prefer req.file.path if multer is configured with a destination
+            const localPath = req.file.path || `uploads/${req.file.filename}`;
+            const uploadRes = await cloudinary.uploader.upload(localPath, {
+                folder: "food-items",
+            });
+            imageUrl = uploadRes.secure_url;
 
-  
+            // Clean up local file
+            if (localPath) {
+                fs.unlink(localPath, () => {});
+            }
+        } else {
+            // Fallback: keep using local filename
+            imageUrl = req.file.filename;
+        }
+
+        // Create new food item
+        const food = new foodModel({
+            name: req.body.name,
+            description: req.body.description,
+            price: req.body.price,
+            category: req.body.category,
+            image: imageUrl,
+        });
+
         await food.save();
-        
+
         return res.status(201).json({ success: true, message: 'Food added' });
     } catch (error) {
         console.error('Error:', error.message);  // Log the error for debugging
-       
         
         return res.status(500).json({ success: false, message: error.message });
     }

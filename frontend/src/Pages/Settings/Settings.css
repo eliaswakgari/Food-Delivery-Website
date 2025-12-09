@@ -1,0 +1,146 @@
+.settings-page {
+         max-width: 720px;
+         margin: 2.5rem auto;
+         padding: 2rem 2.5rem;
+         border-radius: 16px;
+         box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+         background: rgba(255, 255, 255, 0.96);
+}
+
+.settings-title {
+         font-size: 1.5rem;
+         font-weight: 700;
+         margin-bottom: 1.5rem;
+}
+
+.settings-section+.settings-section {
+         margin-top: 2rem;
+         border-top: 1px solid rgba(148, 163, 184, 0.4);
+         padding-top: 1.5rem;
+}
+
+.settings-section-title {
+         font-size: 1rem;
+         font-weight: 600;
+         margin-bottom: 1rem;
+}
+
+.settings-form {
+         display: grid;
+         grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+         gap: 1rem 1.5rem;
+}
+
+.settings-form label {
+         display: flex;
+         flex-direction: column;
+         font-size: 0.9rem;
+}
+
+.settings-form input[type="text"],
+.settings-form input[type="email"],
+.settings-form input[type="password"] {
+         margin-top: 0.3rem;
+         padding: 0.5rem 0.7rem;
+         border-radius: 8px;
+         border: 1px solid #d4d4d8;
+         font-size: 0.9rem;
+}
+
+.settings-save-btn {
+         grid-column: 1 / -1;
+         justify-self: flex-start;
+         margin-top: 0.5rem;
+         padding: 0.55rem 1.1rem;
+         border-radius: 999px;
+         border: none;
+         background: linear-gradient(135deg, #fb7185, #f97316);
+         color: #fff;
+         cursor: pointer;
+         font-size: 0.95rem;
+}
+
+.settings-save-btn:disabled {
+         opacity: 0.7;
+         cursor: default;
+}
+
+.settings-avatar-preview {
+         display: flex;
+         align-items: center;
+         gap: 0.75rem;
+         margin-top: 0.5rem;
+}
+
+.settings-avatar-preview img {
+         width: 80px;
+         height: 80px;
+         border-radius: 50%;
+         object-fit: cover;
+}
+
+.settings-error {
+         grid-column: 1 / -1;
+         color: #b91c1c;
+         font-size: 0.85rem;
+}
+
+.settings-message {
+         grid-column: 1 / -1;
+         color: #15803d;
+         font-size: 0.85rem;
+}
+
+.theme-toggle {
+         display: inline-flex;
+         align-items: center;
+         gap: 0.75rem;
+}
+
+.theme-toggle-btn {
+         display: inline-flex;
+         align-items: center;
+         gap: 0.4rem;
+         padding: 0.45rem 0.8rem;
+         border-radius: 999px;
+         border: 1px solid #d4d4d8;
+         background-color: #f8fafc;
+         cursor: pointer;
+         font-size: 0.9rem;
+}
+
+.theme-toggle-btn svg {
+         font-size: 1rem;
+}
+
+/* Global theme backgrounds */
+.theme-light .app {
+         background-color: #f9fafb;
+         color: #111827;
+}
+
+.theme-dark .app {
+         background-color: #020617;
+         color: #e5e7eb;
+}
+
+.theme-light .settings-page {
+         background-color: #ffffff;
+}
+
+.theme-dark .settings-page {
+         background-color: #020617;
+         box-shadow: 0 18px 45px rgba(15, 23, 42, 0.6);
+}
+
+.theme-dark .settings-form input[type="text"],
+.theme-dark .settings-form input[type="email"],
+.theme-dark .settings-form input[type="password"] {
+         background-color: #020617;
+         border-color: #4b5563;
+         color: #e5e7eb;
+}
+
+.theme-dark .settings-save-btn {
+         background: linear-gradient(135deg, #fb7185, #f97316);
+}
