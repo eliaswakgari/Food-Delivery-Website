@@ -72,10 +72,20 @@ app.use("/api/food", foodRouter);
 app.use("/api/cart", cartRouter);
 app.use("/api/order", orderRouter);
 
-// Health check
-app.get("/", (req, res) => {
-  res.send("Food delivery backend is running");
-});
+// Serve built frontend in production
+const frontendDistPath = path.join(__dirname, "../frontend/dist");
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(frontendDistPath));
+
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(frontendDistPath, "index.html"));
+  });
+} else {
+  // Simple health check for development
+  app.get("/", (req, res) => {
+    res.send("Food delivery backend is running");
+  });
+}
 
 // Start server after DB connection
 connectDB()
