@@ -50,7 +50,8 @@ const Admin = () => {
 
     try {
       const res = await axios.delete(`${API_BASE_URL}/api/order/admin-order/${id}`, {
-        headers: { token },
+        // Use fd_token cookie for auth
+        withCredentials: true,
       });
 
       if (!res.data || !res.data.success) {
@@ -80,7 +81,8 @@ const Admin = () => {
       if ((active !== "orders" && active !== "analytics") || !token) return;
       try {
         const res = await axios.get(`${API_BASE_URL}/api/order/admin-list`, {
-          headers: { token },
+          // Use fd_token cookie for auth
+          withCredentials: true,
         });
         if (res.data && res.data.success && Array.isArray(res.data.data)) {
           setOrders(res.data.data);
@@ -113,9 +115,8 @@ const Admin = () => {
       }
 
       const res = await axios.post(`${API_BASE_URL}/api/food/add`, formData, {
-        headers: {
-          token,
-        },
+        // Use fd_token cookie for auth
+        withCredentials: true,
       });
 
       if (res.data && res.data.success) {
@@ -143,7 +144,10 @@ const Admin = () => {
       const res = await axios.post(
         `${API_BASE_URL}/api/food/remove`,
         { id },
-        { headers: { token } }
+        {
+          // Use fd_token cookie for auth
+          withCredentials: true,
+        }
       );
 
       if (!res.data || !res.data.success) {
@@ -371,7 +375,10 @@ const Admin = () => {
                               const res = await axios.patch(
                                 `${API_BASE_URL}/api/order/admin-order/${o._id}/status`,
                                 { status: newStatus },
-                                { headers: { token } }
+                                {
+                                  // Use fd_token cookie for auth
+                                  withCredentials: true,
+                                }
                               );
                               if (res.data && res.data.success) {
                                 setOrders((prev) =>

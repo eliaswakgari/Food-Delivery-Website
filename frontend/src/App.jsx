@@ -4,6 +4,7 @@ import { useSelector } from "react-redux";
 import Navbar from "./Components/Navbar/Navbar";
 import Footer from "./Components/Footer/Footer";
 import ErrorBoundary from "./Components/ErrorBoundary/ErrorBoundary";
+import AuthBootstrap from "./Components/Auth/AuthBootstrap";
 
 const Home = lazy(() => import("./Pages/Home/Home"));
 const Cart = lazy(() => import("./Pages/Cart/Cart"));
@@ -43,6 +44,7 @@ const App = () => {
          const hideChrome = ["/login", "/forgot-password", "/reset-password"].includes(location.pathname);
          return (
                   <div className={appClass}>
+                           <AuthBootstrap />
                            {!hideChrome && <Navbar />}
                            <ErrorBoundary>
                                     <Suspense fallback={<div style={{ padding: "2rem", textAlign: "center" }}>Loading...</div>}>

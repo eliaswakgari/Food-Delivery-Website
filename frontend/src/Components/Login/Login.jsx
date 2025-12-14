@@ -24,7 +24,11 @@ const Login = () => {
 
                   try {
                            if (mode === "login") {
-                                    const res = await axios.post(`${API_BASE_URL}/api/user/login`, { email, password });
+                                    const res = await axios.post(
+                                             `${API_BASE_URL}/api/user/login`,
+                                             { email, password },
+                                             { withCredentials: true }
+                                    );
                                     if (res.data && res.data.success && res.data.token) {
                                              dispatch(
                                                       setCredentials({
@@ -44,11 +48,15 @@ const Login = () => {
                                              setError("Unexpected response from server");
                                     }
                            } else {
-                                    const res = await axios.post(`${API_BASE_URL}/api/user/register`, {
-                                             name,
-                                             email,
-                                             password,
-                                    });
+                                    const res = await axios.post(
+                                             `${API_BASE_URL}/api/user/register`,
+                                             {
+                                                      name,
+                                                      email,
+                                                      password,
+                                             },
+                                             { withCredentials: true }
+                                    );
 
                                     if (res.data && res.data.success && res.data.token) {
                                              dispatch(
@@ -145,7 +153,9 @@ const Login = () => {
                                     <button
                                              type="button"
                                              className="auth-google"
-                                             onClick={() => alert("Google login requires Google OAuth setup. We can scaffold it next.")}
+                                             onClick={() => {
+                                                      window.location.href = `${API_BASE_URL}/api/user/auth/google`;
+                                             }}
                                     >
                                              Continue with Google
                                     </button>

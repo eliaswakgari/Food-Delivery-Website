@@ -19,7 +19,8 @@ const Navbar = () => {
     const socket = useSelector((state) => state.socket.socket);
     const food_list = useSelector((state) => state.food.food_list) || [];
 
-    const [menuOpen, setMenuOpen] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false); // avatar dropdown
+    const [mobileNavOpen, setMobileNavOpen] = useState(false); // hamburger menu for small screens
     const [pendingCount, setPendingCount] = useState(0);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
@@ -34,11 +35,13 @@ const Navbar = () => {
     const handleLogout = () => {
         dispatch(logout());
         setMenuOpen(false);
+        setMobileNavOpen(false);
         navigate("/");
     };
 
     const handleSettings = () => {
         setMenuOpen(false);
+        setMobileNavOpen(false);
         navigate("/settings");
     };
 
@@ -62,13 +65,19 @@ const Navbar = () => {
         if (!isHome) navigate("/");
     };
 
+    // Close mobile nav when route changes
+    useEffect(() => {
+        setMobileNavOpen(false);
+    }, [location.pathname]);
+
     // Fetch pending orders for admin
     useEffect(() => {
         const fetchPending = async () => {
             if (!token || role !== "admin") return;
             try {
                 const res = await axios.get(`${API_BASE_URL}/api/order/admin-list`, {
-                    headers: { token },
+                    // Use fd_token cookie for auth
+                    withCredentials: true,
                 });
 
                 if (res.data?.success && Array.isArray(res.data.data)) {
@@ -255,9 +264,20 @@ const Navbar = () => {
                 <>
                     <div className="navbar-logo">
                         <Link to="/">Food Delivery</Link>
+
+                        {/* Hamburger for small screens */}
+                        <button
+                            type="button"
+                            className={`navbar-burger ${mobileNavOpen ? "navbar-burger-open" : ""}`}
+                            onClick={() => setMobileNavOpen((prev) => !prev)}
+                        >
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </button>
                     </div>
 
-                    <ul className="navbar-links">
+                    <ul className={`navbar-links ${mobileNavOpen ? "navbar-links-open" : ""}`}>
                         <li><Link to="/">Home</Link></li>
 
                         {/* USER NAV */}

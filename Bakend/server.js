@@ -8,6 +8,7 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 const connectDB = require("./config/db");
+const passport = require("./config/passport");
 const userRouter = require("./routes/userRoute");
 const foodRouter = require("./routes/foodRoute");
 const cartRouter = require("./routes/cartRoute");
@@ -50,6 +51,9 @@ app.use(
     credentials: true,
   })
 );
+
+// Initialize Passport (for Google OAuth)
+app.use(passport.initialize());
 
 // Stripe webhook must use raw body (no JSON parsing)
 app.post("/api/order/webhook", express.raw({ type: "application/json" }), webhookHandler);

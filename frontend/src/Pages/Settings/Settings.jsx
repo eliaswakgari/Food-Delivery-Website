@@ -46,24 +46,34 @@ const Settings = () => {
                   const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
                   if (!cloudName || !uploadPreset) {
-                           throw new Error("Cloudinary env variables are missing");
+                           console.warn("Cloudinary env variables are missing; skipping avatar upload.");
+                           // Fallback: keep whatever avatar the user already had
+                           return avatarPreview || "";
                   }
 
                   const formData = new FormData();
                   formData.append("file", avatarFile);
                   formData.append("upload_preset", uploadPreset);
 
-                  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-                           method: "POST",
-                           body: formData,
-                  });
+                  try {
+                           const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+                                    method: "POST",
+                                    body: formData,
+                           });
 
-                  if (!res.ok) {
-                           throw new Error("Failed to upload avatar");
+                           if (!res.ok) {
+                                    console.error("Avatar upload failed with status", res.status);
+                                    // Fallback: do not change avatar if upload fails
+                                    return avatarPreview || "";
+                           }
+
+                           const data = await res.json();
+                           return data.secure_url || avatarPreview || "";
+                  } catch (err) {
+                           console.error("Avatar upload error", err);
+                           // Fallback: keep existing avatar on any error
+                           return avatarPreview || "";
                   }
-
-                  const data = await res.json();
-                  return data.secure_url;
          };
 
          const handleSubmit = async (e) => {
@@ -110,7 +120,8 @@ const Settings = () => {
                                     `${API_BASE_URL}/api/user/profile`,
                                     payload,
                                     {
-                                             headers: { token },
+                                             // Use fd_token cookie for auth
+                                             withCredentials: true,
                                     }
                            );
 

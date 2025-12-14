@@ -22,7 +22,8 @@ const Orders = () => {
                            }
                            try {
                                     const res = await axios.get(`${API_BASE_URL}/api/order/user-list`, {
-                                             headers: { token },
+                                             // Use fd_token cookie for auth; no custom token header needed
+                                             withCredentials: true,
                                     });
                                     if (res.data && res.data.success && Array.isArray(res.data.data)) {
                                              setOrders(res.data.data);
@@ -83,7 +84,10 @@ const Orders = () => {
                            const res = await axios.patch(
                                     `${API_BASE_URL}/api/order/user-order/${orderId}/confirm-delivery`,
                                     {},
-                                    { headers: { token } }
+                                    {
+                                             // Use fd_token cookie for auth; no custom token header needed
+                                             withCredentials: true,
+                                    }
                            );
                            if (res.data && res.data.success && res.data.data) {
                                     const updated = res.data.data;

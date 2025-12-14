@@ -319,5 +319,58 @@ const logoutUser = (req, res) => {
   res.clearCookie("fd_token", { path: "/" });
   return res.status(200).json({ success: true, message: "Logged out" });
 };
+const googleOAuthCallback = (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Google authentication failed" });
+    }
 
-module.exports = { loginUser, RegisterUser, promoteToAdmin, forgotPassword, resetPassword, getProfile, updateProfile, logoutUser };
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+    const userData = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar || null,
+    };
+
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    };
+
+    res.cookie("fd_token", token, cookieOptions);
+
+    const publicCookieOptions = {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    };
+
+    res.cookie("fd_role", user.role || "user", publicCookieOptions);
+    res.cookie("fd_user", JSON.stringify(userData), publicCookieOptions);
+
+    const rawOrigins = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
+    const firstOrigin = rawOrigins
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean)[0] || "http://localhost:5173";
+
+    const redirectPath = user.role === "admin" ? "/admin" : "/";
+    const redirectUrl = `${firstOrigin}${redirectPath}`;
+
+    return res.redirect(redirectUrl);
+  } catch (error) {
+    console.log(error.message);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+module.exports = { loginUser, RegisterUser, promoteToAdmin, forgotPassword, resetPassword, getProfile, updateProfile, logoutUser, googleOAuthCallback };

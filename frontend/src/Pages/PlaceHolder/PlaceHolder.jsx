@@ -59,7 +59,8 @@ const PlaceHolder = () => {
 
     try {
       const response = await axios.post(`${API_BASE_URL}/api/order/place`, orderData, {
-        headers: { token },
+        // Rely on fd_token cookie for backend auth; no need to send token header
+        withCredentials: true,
       });
 
       if (response.data.success) {
