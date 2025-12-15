@@ -70,8 +70,28 @@
 }
 
 .auth-error {
-         color: #d93025;
-         font-size: 0.8rem;
+  color: #ff4d4f;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.password-rules {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.8rem;
+}
+
+.password-rules li {
+  margin: 0.15rem 0;
+}
+
+.password-rules li.invalid {
+  color: #ff4d4f;
+}
+
+.password-rules li.valid {
+  color: #52c41a;
 }
 
 .auth-toggle,

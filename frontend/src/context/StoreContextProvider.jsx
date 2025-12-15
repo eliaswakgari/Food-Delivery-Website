@@ -1,6 +1,8 @@
 import React, { createContext, useEffect, useState } from "react";
 import axios from "axios";
 import { io } from "socket.io-client";
+import { useDispatch } from "react-redux";
+import { setSocket as setSocketAction } from "../store/socketSlice";
 
 export const StoreContext = createContext();
 
@@ -42,6 +44,7 @@ const StoreContextProvider = ({ children }) => {
          });
          const [theme, setTheme] = useState("light");
          const [socket, setSocket] = useState(null);
+         const dispatch = useDispatch();
          const [searchQuery, setSearchQuery] = useState("");
 
          const addToCart = (id) => {
@@ -128,11 +131,15 @@ const StoreContextProvider = ({ children }) => {
                            withCredentials: true,
                   });
                   setSocket(s);
+                  // Expose this socket instance to Redux so components like Navbar
+                  // can subscribe to events from the same connection.
+                  dispatch(setSocketAction(s));
 
                   return () => {
+                           dispatch(setSocketAction(null));
                            s.disconnect();
                   };
-         }, [socketUrl]);
+         }, [socketUrl, dispatch]);
 
          const value = {
                   url,

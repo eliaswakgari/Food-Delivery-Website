@@ -17,6 +17,11 @@ const Login = () => {
          const [loading, setLoading] = useState(false);
          const [error, setError] = useState("");
 
+         const hasMinLength = password.length >= 8;
+         const hasLetter = /[A-Za-z]/.test(password);
+         const hasNumber = /[0-9]/.test(password);
+         const hasSymbol = /[^A-Za-z0-9]/.test(password);
+
          const handleSubmit = async (e) => {
                   e.preventDefault();
                   setError("");
@@ -75,7 +80,16 @@ const Login = () => {
                            }
                   } catch (err) {
                            const backendMessage = err?.response?.data?.message;
-                           setError(backendMessage || "Server error during authentication");
+                           const status = err?.response?.status;
+
+                           if (
+                                    mode === "login" &&
+                                    (status === 401 || status === 404 || backendMessage === "Invalid credentials")
+                           ) {
+                                    setError("Email or password is incorrect");
+                           } else {
+                                    setError(backendMessage || "Server error during authentication");
+                           }
                   } finally {
                            setLoading(false);
                   }
@@ -115,6 +129,21 @@ const Login = () => {
                                              onChange={(e) => setPassword(e.target.value)}
                                              required
                                     />
+
+                                    <ul className="password-rules">
+                                             <li className={hasMinLength ? "valid" : "invalid"}>
+                                                      Must be at least 8 characters
+                                             </li>
+                                             <li className={hasLetter ? "valid" : "invalid"}>
+                                                      Must contain at least 1 letter
+                                             </li>
+                                             <li className={hasNumber ? "valid" : "invalid"}>
+                                                      Must contain at least 1 number
+                                             </li>
+                                             <li className={hasSymbol ? "valid" : "invalid"}>
+                                                      Must contain at least 1 symbol (e.g. ! @ # $ %)
+                                             </li>
+                                    </ul>
 
                                     {error && <p className="auth-error">{error}</p>}
 

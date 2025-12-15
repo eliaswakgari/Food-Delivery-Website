@@ -10,18 +10,29 @@ const getCookie = (name) => {
   return decodeURIComponent(match.split("=")[1] || "");
 };
 
+// Read from non-httpOnly cookies (set by the frontend) for fast bootstrap.
+// If there is no token cookie, we start in a "loading" state so AuthBootstrap
+// can ask the backend (/api/user/me) whether the user is authenticated.
+const initialToken = getCookie("fd_token") || "";
+const initialRole = getCookie("fd_role") || "";
+const initialUser = (() => {
+  const raw = getCookie("fd_user");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+})();
+
 const initialState = {
-  token: (() => getCookie("fd_token") || "")(),
-  role: (() => getCookie("fd_role") || "")(),
-  user: (() => {
-    const raw = getCookie("fd_user");
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  })(),
+  token: initialToken,
+  role: initialRole,
+  user: initialUser,
+  // While we don't know yet whether the user is authenticated, we keep
+  // loading=true. Route guards will wait for this to be false before
+  // deciding to redirect to /login.
+  loading: !initialToken,
 };
 
 const authSlice = createSlice({
@@ -33,14 +44,21 @@ const authSlice = createSlice({
       if (typeof token !== "undefined") state.token = token;
       if (typeof role !== "undefined") state.role = role;
       if (typeof user !== "undefined") state.user = user;
+      state.loading = false;
+    },
+    // Explicitly mark auth bootstrap as finished (used when backend says
+    // the user is not logged in, or when the profile load fails).
+    setAuthLoaded(state) {
+      state.loading = false;
     },
     logout(state) {
       state.token = "";
       state.role = "";
       state.user = null;
+      state.loading = false;
     },
   },
 });
 
-export const { setCredentials, logout } = authSlice.actions;
+export const { setCredentials, setAuthLoaded, logout } = authSlice.actions;
 export default authSlice.reducer;

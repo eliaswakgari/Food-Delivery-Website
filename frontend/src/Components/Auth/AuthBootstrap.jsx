@@ -2,15 +2,19 @@ import { useEffect } from "react";
 import axios from "axios";
 import { useDispatch, useSelector } from "react-redux";
 import { API_BASE_URL } from "../../store/config";
-import { setCredentials } from "../../store/authSlice";
+import { setCredentials, setAuthLoaded } from "../../store/authSlice";
 
 const AuthBootstrap = () => {
          const dispatch = useDispatch();
          const token = useSelector((state) => state.auth.token);
 
          useEffect(() => {
-                  // If we already have a token in Redux, do nothing
-                  if (token) return;
+                  // If we already have a token in Redux, we consider auth loaded
+                  // and do not re-fetch from the backend.
+                  if (token) {
+                           dispatch(setAuthLoaded());
+                           return;
+                  }
 
                   let cancelled = false;
 
@@ -20,7 +24,13 @@ const AuthBootstrap = () => {
                                              withCredentials: true,
                                     });
 
-                                    if (!res.data || !res.data.success || !res.data.user) return;
+                                    if (!res.data || !res.data.success || !res.data.user) {
+                                             // Not authenticated; just mark auth as loaded
+                                             if (!cancelled) {
+                                                      dispatch(setAuthLoaded());
+                                             }
+                                             return;
+                                    }
 
                                     if (cancelled) return;
 
@@ -36,7 +46,11 @@ const AuthBootstrap = () => {
                                              })
                                     );
                            } catch (err) {
-                                    // Not logged in or error; ignore, user stays unauthenticated in Redux
+                                    // Not logged in or error; mark auth as loaded so route
+                                    // guards can decide based on the empty token.
+                                    if (!cancelled) {
+                                             dispatch(setAuthLoaded());
+                                    }
                            }
                   };
 

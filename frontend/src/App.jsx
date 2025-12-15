@@ -10,6 +10,7 @@ const Home = lazy(() => import("./Pages/Home/Home"));
 const Cart = lazy(() => import("./Pages/Cart/Cart"));
 const PlaceHolder = lazy(() => import("./Pages/PlaceHolder/PlaceHolder"));
 const Orders = lazy(() => import("./Pages/Orders/Orders"));
+const OrderDetail = lazy(() => import("./Pages/Orders/OrderDetail"));
 const Login = lazy(() => import("./Components/Login/Login"));
 const Verify = lazy(() => import("./Pages/Verify/Verify"));
 const ForgotPassword = lazy(() => import("./Pages/ForgotPassword/ForgotPassword"));
@@ -19,6 +20,12 @@ const Settings = lazy(() => import("./Pages/Settings/Settings"));
 
 const ProtectedRoute = ({ children }) => {
          const token = useSelector((state) => state.auth.token);
+         const loading = useSelector((state) => state.auth.loading);
+
+         if (loading) {
+                  return <div style={{ padding: "2rem", textAlign: "center" }}>Checking authentication...</div>;
+         }
+
          if (!token) {
                   return <Navigate to="/login" replace />;
          }
@@ -28,6 +35,12 @@ const ProtectedRoute = ({ children }) => {
 const AdminRoute = ({ children }) => {
          const token = useSelector((state) => state.auth.token);
          const role = useSelector((state) => state.auth.role);
+         const loading = useSelector((state) => state.auth.loading);
+
+         if (loading) {
+                  return <div style={{ padding: "2rem", textAlign: "center" }}>Checking authentication...</div>;
+         }
+
          if (!token) {
                   return <Navigate to="/login" replace />;
          }
@@ -42,6 +55,7 @@ const App = () => {
          const appClass = `app theme-${theme}`;
          const location = useLocation();
          const hideChrome = ["/login", "/forgot-password", "/reset-password"].includes(location.pathname);
+         const hideFooter = hideChrome || location.pathname.startsWith("/admin");
          return (
                   <div className={appClass}>
                            <AuthBootstrap />
@@ -55,6 +69,14 @@ const App = () => {
                                                                element={
                                                                         <ProtectedRoute>
                                                                                  <Cart />
+                                                                        </ProtectedRoute>
+                                                               }
+                                                      />
+                                                      <Route
+                                                               path="/orders/:id"
+                                                               element={
+                                                                        <ProtectedRoute>
+                                                                                 <OrderDetail />
                                                                         </ProtectedRoute>
                                                                }
                                                       />
@@ -87,6 +109,14 @@ const App = () => {
                                                                }
                                                       />
                                                       <Route
+                                                               path="/admin/notifications/:orderId"
+                                                               element={
+                                                                        <AdminRoute>
+                                                                                 <Admin />
+                                                                        </AdminRoute>
+                                                               }
+                                                      />
+                                                      <Route
                                                                path="/settings"
                                                                element={
                                                                         <ProtectedRoute>
@@ -97,7 +127,7 @@ const App = () => {
                                              </Routes>
                                     </Suspense>
                            </ErrorBoundary>
-                           {!hideChrome && <Footer />}
+                           {!hideFooter && <Footer />}
                   </div>
          );
 };

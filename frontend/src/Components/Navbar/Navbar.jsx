@@ -6,6 +6,7 @@ import axios from "axios";
 import { useDispatch, useSelector } from "react-redux";
 import { API_BASE_URL } from "../../store/config";
 import { logout, setCredentials } from "../../store/authSlice";
+import { upsertNotification, markNotificationRead } from "../../store/notificationSlice";
 import { setSearchQuery as setSearchQueryAction, setCategory as setCategoryAction } from "../../store/uiSlice";
 
 const Navbar = () => {
@@ -17,16 +18,19 @@ const Navbar = () => {
     const searchQuery = useSelector((state) => state.ui.searchQuery) || "";
     const category = useSelector((state) => state.ui.category) || "All";
     const socket = useSelector((state) => state.socket.socket);
+    const allNotifications = useSelector((state) => state.notifications.items) || [];
     const food_list = useSelector((state) => state.food.food_list) || [];
 
     const [menuOpen, setMenuOpen] = useState(false); // avatar dropdown
     const [mobileNavOpen, setMobileNavOpen] = useState(false); // hamburger menu for small screens
     const [pendingCount, setPendingCount] = useState(0);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
-    const [notifications, setNotifications] = useState([]);
-
     const [userNotifOpen, setUserNotifOpen] = useState(false);
-    const [userNotifications, setUserNotifications] = useState([]);
+
+    const adminNotifications = allNotifications.filter((n) => n.role === "admin");
+    const userNotifications = allNotifications.filter((n) => n.role === "user");
+    const adminUnreadCount = adminNotifications.filter((n) => !n.read).length;
+    const userUnreadCount = userNotifications.filter((n) => !n.read).length;
 
     const navigate = useNavigate();
     const location = useLocation();
@@ -70,7 +74,7 @@ const Navbar = () => {
         setMobileNavOpen(false);
     }, [location.pathname]);
 
-    // Fetch pending orders for admin
+    // Fetch pending orders count for admin (badge on bell)
     useEffect(() => {
         const fetchPending = async () => {
             if (!token || role !== "admin") return;
@@ -86,19 +90,6 @@ const Navbar = () => {
                     );
 
                     setPendingCount(pendingOrders.length);
-
-                    const mapped = pendingOrders.slice(-10).map((o) => {
-                        const firstItem = Array.isArray(o.items) ? o.items[0] : null;
-                        const dateObj = new Date(o.date || o.createdAt);
-
-                        return {
-                            id: o._id,
-                            title: firstItem ? firstItem.name : "New order",
-                            dateLabel: dateObj.toLocaleString(),
-                        };
-                    });
-
-                    setNotifications(mapped.reverse());
                 }
             } catch (err) {
                 console.error("Navbar fetch error:", err);
@@ -110,13 +101,32 @@ const Navbar = () => {
         return () => clearInterval(id);
     }, [token, role]);
 
-    // Admin socket updates
+    // Admin socket updates: real-time pending counter + notifications
     useEffect(() => {
         if (!socket || role !== "admin") return;
 
-        const handleNewOrder = () => setPendingCount((prev) => prev + 1);
+        const handleNewOrder = (payload = {}) => {
+            setPendingCount((prev) => prev + 1);
 
-        const handleStatusChanged = ({ status }) => {
+            const id = payload.orderId || payload._id;
+            if (!id) return;
+
+            const title = payload.title || "New order";
+            const dateLabel = new Date(payload.date || Date.now()).toLocaleString();
+
+            dispatch(
+                upsertNotification({
+                    id,
+                    role: "admin",
+                    title,
+                    dateLabel,
+                    status: payload.status || "Pending",
+                    read: false,
+                })
+            );
+        };
+
+        const handleStatusChanged = ({ orderId, status }) => {
             setPendingCount((prev) => {
                 if (status === "Pending") return prev + 1;
                 if (["Preparing", "Ready", "Delivered"].includes(status)) {
@@ -124,6 +134,22 @@ const Navbar = () => {
                 }
                 return prev;
             });
+
+            // When user confirms pickup (Delivered), notify admin explicitly
+            if (status === "Delivered" && orderId) {
+                const title = `Order #${String(orderId).slice(-6)} picked up`;
+                const dateLabel = new Date().toLocaleString();
+                dispatch(
+                    upsertNotification({
+                        id: orderId,
+                        role: "admin",
+                        title,
+                        dateLabel,
+                        status,
+                        read: false,
+                    })
+                );
+            }
         };
 
         socket.on("order:new", handleNewOrder);
@@ -135,25 +161,28 @@ const Navbar = () => {
         };
     }, [socket, role]);
 
-    // User order ready notifications
+    // User order ready notifications (non-admin customers)
     useEffect(() => {
         if (!socket || !user?._id || role === "admin") return;
 
         const handleUserStatusChanged = ({ userId, orderId, status }) => {
             if (userId !== user._id || status !== "Ready") return;
 
-            setUserNotifications((prev) => {
-                if (prev.some((n) => n.id === orderId)) return prev;
-                return [
-                    { id: orderId, title: "Your order is ready", dateLabel: new Date().toLocaleString() },
-                    ...prev,
-                ].slice(0, 10);
-            });
+            dispatch(
+                upsertNotification({
+                    id: orderId,
+                    role: "user",
+                    title: "Your order is ready",
+                    dateLabel: new Date().toLocaleString(),
+                    status,
+                    read: false,
+                })
+            );
         };
 
         socket.on("order:statusChanged", handleUserStatusChanged);
         return () => socket.off("order:statusChanged", handleUserStatusChanged);
-    }, [socket, user, role]);
+    }, [socket, user, role, dispatch]);
 
     return (
         <nav className={`navbar ${isHome && role !== "admin" ? "navbar-amz" : ""}`}>
@@ -176,9 +205,17 @@ const Navbar = () => {
 
                     <div className="navbar-amz-search-wrapper">
                         <form className="navbar-amz-search" onSubmit={handleSearchSubmit}>
-                            <select className="navbar-amz-search-category" value="All" readOnly>
+                            <select
+                                className="navbar-amz-search-category"
+                                value={category}
+                                onChange={(e) => {
+                                    const value = e.target.value;
+                                    dispatch(setCategoryAction(value));
+                                    if (!isHome) navigate("/");
+                                }}
+                            >
                                 {categories.map((c) => (
-                                    <option key={c}>{c}</option>
+                                    <option key={c} value={c}>{c}</option>
                                 ))}
                             </select>
 
@@ -218,8 +255,8 @@ const Navbar = () => {
                                     onClick={() => setUserNotifOpen((prev) => !prev)}
                                 >
                                     <FaBell />
-                                    {userNotifications.length > 0 && (
-                                        <span className="navbar-icon-badge">{userNotifications.length}</span>
+                                    {userUnreadCount > 0 && (
+                                        <span className="navbar-icon-badge">userUnreadCount</span>
                                     )}
                                 </button>
 
@@ -330,13 +367,14 @@ const Navbar = () => {
                                                 {userNotifications.length === 0 ? (
                                                     <div className="navbar-notifications-empty">No notifications</div>
                                                 ) : (
-                                                    userNotifications.map((n) => (
+                                                    globalNotifications.notifications.map((n) => (
                                                         <button
                                                             key={n.id}
                                                             className="navbar-notifications-item"
                                                             onClick={() => {
+                                                                dispatch(markNotificationRead({ id: n.id, role: "user" }));
                                                                 setUserNotifOpen(false);
-                                                                navigate("/orders");
+                                                                navigate(`/orders/${n.id}`);
                                                             }}
                                                         >
                                                             <span>{n.title}</span>
@@ -367,8 +405,8 @@ const Navbar = () => {
                                         onClick={() => setNotificationsOpen((prev) => !prev)}
                                     >
                                         <FaBell />
-                                        {pendingCount > 0 && (
-                                            <span className="navbar-icon-badge">{pendingCount}</span>
+                                        {(adminUnreadCount > 0 || pendingCount > 0) && (
+                                            <span className="navbar-icon-badge">{adminUnreadCount || pendingCount}</span>
                                         )}
                                     </button>
 
@@ -376,14 +414,15 @@ const Navbar = () => {
                                         <div className="navbar-notifications-panel">
                                             <div className="navbar-notifications-header">New Orders</div>
 
-                                            {notifications.length === 0 ? (
+                                            {adminNotifications.length === 0 ? (
                                                 <div className="navbar-notifications-empty">No pending orders</div>
                                             ) : (
-                                                notifications.map((n) => (
+                                                adminNotifications.map((n) => (
                                                     <button
                                                         key={n.id}
                                                         className="navbar-notifications-item"
                                                         onClick={() => {
+                                                            dispatch(markNotificationRead({ id: n.id, role: "admin" }));
                                                             setNotificationsOpen(false);
                                                             navigate(`/admin?orderId=${n.id}`);
                                                         }}

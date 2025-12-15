@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import "./Orders.css";
 import axios from "axios";
 import { useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../../store/config";
 
 const STATUS_STEPS = ["Pending", "Preparing", "Ready", "Delivered"];
@@ -13,6 +14,7 @@ const Orders = () => {
          const [orders, setOrders] = useState([]);
          const [loading, setLoading] = useState(true);
          const [confirmingId, setConfirmingId] = useState(null);
+         const navigate = useNavigate();
 
          useEffect(() => {
                   const fetchOrders = async () => {
@@ -112,7 +114,12 @@ const Orders = () => {
                                              const isReady = (order.status || "Pending") === "Ready";
                                              const isDelivered = (order.status || "Pending") === "Delivered";
                                              return (
-                                                      <div key={order._id} className="orders-card">
+                                                      <div
+                                                               key={order._id}
+                                                               className="orders-card"
+                                                               onClick={() => navigate(`/orders/${order._id}`)}
+                                                               style={{ cursor: "pointer" }}
+                                                      >
                                                                <div className="orders-card-header">
                                                                         <div>
                                                                                  <p className="orders-card-title">Order #{order._id.slice(-6)}</p>

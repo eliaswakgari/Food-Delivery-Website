@@ -4,6 +4,7 @@ import foodReducer from "./foodSlice";
 import cartReducer from "./cartSlice";
 import uiReducer from "./uiSlice";
 import socketReducer from "./socketSlice";
+import notificationReducer from "./notificationSlice";
 
 const store = configureStore({
   reducer: {
@@ -12,6 +13,7 @@ const store = configureStore({
     cart: cartReducer,
     ui: uiReducer,
     socket: socketReducer,
+    notifications: notificationReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -1,21 +1,15 @@
 import React from "react";
 import "./Explore.css";
 
-const Explore = ({ category, setCategory }) => {
-         const categories = [
-                  "All",
-                  "Pizza",
-                  "Burger",
-                  "Dessert",
-                  "Drinks",
-         ];
+const Explore = ({ category, setCategory, categories = [] }) => {
+         const options = ["All", ...categories.filter((c, idx) => categories.indexOf(c) === idx)];
 
          return (
                   <div className="explore">
                            <h2>Explore Our Menu</h2>
                            {/* Desktop/tablet: pills */}
                            <div className="explore-list">
-                                    {categories.map((cat) => (
+                                    {options.map((cat) => (
                                              <button
                                                       key={cat}
                                                       className={cat === category ? "active" : ""}
@@ -32,7 +26,7 @@ const Explore = ({ category, setCategory }) => {
                                              value={category}
                                              onChange={(e) => setCategory(e.target.value)}
                                     >
-                                             {categories.map((cat) => (
+                                             {options.map((cat) => (
                                                       <option key={cat} value={cat}>
                                                                {cat}
                                                       </option>
