@@ -40,15 +40,17 @@ const Settings = () => {
          };
 
          const uploadAvatarToCloudinary = async () => {
+                  // If no new file was selected, keep whatever avatar the user already had.
                   if (!avatarFile) return avatarPreview || "";
 
                   const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
                   const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
+                  // If Cloudinary is not configured, do not attempt to upload and do not
+                  // change the persisted avatar (return empty string so backend ignores it).
                   if (!cloudName || !uploadPreset) {
                            console.warn("Cloudinary env variables are missing; skipping avatar upload.");
-                           // Fallback: keep whatever avatar the user already had
-                           return avatarPreview || "";
+                           return "";
                   }
 
                   const formData = new FormData();
@@ -64,15 +66,16 @@ const Settings = () => {
                            if (!res.ok) {
                                     console.error("Avatar upload failed with status", res.status);
                                     // Fallback: do not change avatar if upload fails
-                                    return avatarPreview || "";
+                                    return "";
                            }
 
                            const data = await res.json();
-                           return data.secure_url || avatarPreview || "";
+                           // Only ever persist a real URL from Cloudinary, never a blob:
+                           return data.secure_url || "";
                   } catch (err) {
                            console.error("Avatar upload error", err);
-                           // Fallback: keep existing avatar on any error
-                           return avatarPreview || "";
+                           // Fallback: keep existing avatar on any error by not sending a new value
+                           return "";
                   }
          };
 

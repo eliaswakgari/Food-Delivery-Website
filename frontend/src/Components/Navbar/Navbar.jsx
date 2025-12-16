@@ -36,7 +36,21 @@ const Navbar = () => {
     const location = useLocation();
     const isHome = location.pathname === "/";
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        try {
+            // Ask backend to clear the httpOnly fd_token cookie.
+            await axios.post(
+                `${API_BASE_URL}/api/user/logout`,
+                {},
+                {
+                    withCredentials: true,
+                }
+            );
+        } catch (err) {
+            // Even if backend call fails, fall back to clearing client state.
+            console.error("Logout request failed", err);
+        }
+
         dispatch(logout());
         setMenuOpen(false);
         setMobileNavOpen(false);
