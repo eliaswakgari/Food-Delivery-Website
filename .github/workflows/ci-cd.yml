@@ -10,33 +10,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ----------------------
+      # Checkout Code
+      # ----------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ----------------------
+      # Setup Node.js
+      # ----------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: 'npm'
           cache-dependency-path: |
-            Bakend/package-lock.json
+            Backend/package-lock.json
             frontend/package-lock.json
 
-      # ======================
-      # Backend (Server)
-      # ======================
+      # ----------------------
+      # Backend
+      # ----------------------
       - name: Install backend dependencies
-        working-directory: Bakend
+        working-directory: Backend
         run: npm ci
 
       - name: Run backend tests
-        working-directory: Bakend
+        working-directory: Backend
         run: npm test || echo "No backend tests configured"
         continue-on-error: true
 
-      # ======================
-      # Frontend (Client)
-      # ======================
+      # ----------------------
+      # Frontend
+      # ----------------------
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -50,26 +56,26 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      # ======================
+      # ----------------------
       # Deploy Backend (Render)
-      # ======================
+      # ----------------------
       - name: Deploy backend to Render
-        if: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        if: ${{ secrets.RENDER_DEPLOY_HOOK }}  # ✅ Fixed
         run: |
           curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}" \
             -H "Content-Type: application/json" \
             -f -s -S || echo "Render deployment hook failed"
         continue-on-error: true
 
-      # ======================
+      # ----------------------
       # Deploy Frontend (Vercel)
-      # ======================
+      # ----------------------
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
       - name: Deploy frontend to Vercel
-        if: ${{ secrets.VERCEL_TOKEN }}
+        if: ${{ secrets.VERCEL_TOKEN }}  # ✅ Fixed
         working-directory: frontend
         run: |
-          vercel --prod --yes --token=${{ secrets.VERCEL_TOKEN }} || echo "Vercel deployment failed"
+          vercel --prod --yes --token="${{ secrets.VERCEL_TOKEN }}" || echo "Vercel deployment failed"
         continue-on-error: true
