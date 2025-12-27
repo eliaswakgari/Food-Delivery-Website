@@ -25,18 +25,18 @@ jobs:
           node-version: 18
           cache: 'npm'
           cache-dependency-path: |
-            Backend/package-lock.json
+            Bakend/package-lock.json
             frontend/package-lock.json
 
       # ----------------------
       # Backend
       # ----------------------
       - name: Install backend dependencies
-        working-directory: Backend
+        working-directory: Bakend
         run: npm ci
 
       - name: Run backend tests
-        working-directory: Backend
+        working-directory: Bakend
         run: npm test || echo "No backend tests configured"
         continue-on-error: true
 
