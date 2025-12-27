@@ -1,5 +1,21 @@
 import { createSlice } from "@reduxjs/toolkit";
 
+const loadPersistedNotifications = () => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem("fd_notifications");
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((n) => n && n.id && n.role)
+      .slice(0, 50)
+      .map((n) => ({ ...n, read: !!n.read }));
+  } catch {
+    return [];
+  }
+};
+
 // Generic notification item used for both admin and customer
 // id: usually the orderId
 // role: "admin" | "user"
@@ -8,7 +24,7 @@ import { createSlice } from "@reduxjs/toolkit";
 const notificationSlice = createSlice({
   name: "notifications",
   initialState: {
-    items: [],
+    items: loadPersistedNotifications(),
   },
   reducers: {
     upsertNotification(state, action) {
@@ -26,7 +42,13 @@ const notificationSlice = createSlice({
       const { id, role } = action.payload || {};
       if (!id || !role) return;
       const target = state.items.find((x) => x.id === id && x.role === role);
-      if (target) target.read = true;
+      if (target) {
+        target.read = true;
+        return;
+      }
+
+      state.items.unshift({ id, role, read: true });
+      if (state.items.length > 50) state.items.pop();
     },
     markAllReadForRole(state, action) {
       const role = action.payload;

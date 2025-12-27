@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useSelector } from "react-redux";
 import { API_BASE_URL } from "../../store/config";
+import "./Verify.css";
 
 const Verify = () => {
          const location = useLocation();
@@ -79,75 +80,57 @@ const Verify = () => {
          };
 
          return (
-                  <div style={{ padding: "2rem" }}>
-                           {status === "pending" && (
-                                    <div style={{ textAlign: "center" }}>
-                                             <h2>Verifying your payment...</h2>
-                                    </div>
-                           )}
+                  <div className="verify-page">
+                           <div className="verify-shell">
+                                    {status === "pending" && (
+                                             <>
+                                                      <div className="verify-title">Verifying your payment...</div>
+                                                      <div className="verify-subtitle">Please wait a moment.</div>
+                                             </>
+                                    )}
 
-                           {status !== "pending" && (
-                                    <>
-                                             <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-                                                      <h2>{message}</h2>
-                                             </div>
+                                    {status !== "pending" && (
+                                             <>
+                                                      <div className="verify-title">{message}</div>
 
-                                             {status === "success" && order && (
-                                                      <div
-                                                               style={{
-                                                                        maxWidth: "700px",
-                                                                        margin: "0 auto 2rem auto",
-                                                                        border: "1px solid #e5e7eb",
-                                                                        borderRadius: "0.75rem",
-                                                                        padding: "1.5rem",
-                                                                        boxShadow: "0 10px 15px -3px rgba(0,0,0,0.05)",
-                                                               }}
-                                                      >
-                                                               <h3 style={{ marginBottom: "0.75rem" }}>
-                                                                        Order #{order._id && order._id.slice(-6)}
-                                                               </h3>
-                                                               <p style={{ marginBottom: "0.25rem", color: "#6b7280" }}>
-                                                                        Amount: ${order.amount}
-                                                               </p>
-                                                               <p style={{ marginBottom: "0.75rem", color: "#6b7280" }}>
-                                                                        Status: {order.status || "Pending"}
-                                                               </p>
+                                                      {status === "success" && order && (
+                                                               <div className="verify-card">
+                                                                        <div className="verify-badge">✓</div>
+                                                                        <div className="verify-order-title">Order #{order._id && order._id.slice(-6)}</div>
+                                                                        <div className="verify-meta">Amount: ${order.amount}</div>
+                                                                        <div className="verify-meta">Status: {order.status || "Pending"}</div>
 
-                                                               {Array.isArray(order.items) && order.items.length > 0 && (
-                                                                        <div>
-                                                                                 <h4 style={{ marginBottom: "0.5rem" }}>Items</h4>
-                                                                                 <ul style={{ listStyle: "none", padding: 0 }}>
-                                                                                          {order.items.map((it, idx) => (
-                                                                                                   <li
-                                                                                                            key={idx}
-                                                                                                            style={{
-                                                                                                                     display: "flex",
-                                                                                                                     justifyContent: "space-between",
-                                                                                                                     padding: "0.25rem 0",
-                                                                                                            }}
-                                                                                                   >
-                                                                                                            <span>{it.name}</span>
-                                                                                                            <span>x{it.quantity || 1}</span>
-                                                                                                            <span>${Number(it.price || 0).toFixed(2)}</span>
-                                                                                                   </li>
-                                                                                          ))}
-                                                                                 </ul>
-                                                                        </div>
-                                                               )}
+                                                                        {Array.isArray(order.items) && order.items.length > 0 && (
+                                                                                 <div className="verify-items">
+                                                                                          <h4>Items</h4>
+                                                                                          <ul>
+                                                                                                   {order.items.map((it, idx) => (
+                                                                                                            <li key={idx}>
+                                                                                                                     <span>{it.name}</span>
+                                                                                                                     <span>x{it.quantity || 1}</span>
+                                                                                                                     <span>${Number(it.price || 0).toFixed(2)}</span>
+                                                                                                            </li>
+                                                                                                   ))}
+                                                                                          </ul>
+                                                                                 </div>
+                                                                        )}
+                                                               </div>
+                                                      )}
+
+                                                      <div className="verify-actions">
+                                                               <button className="verify-btn" onClick={handleBackToHome}>
+                                                                        Back to Home
+                                                               </button>
+                                                               <button className="verify-btn verify-btn-primary" onClick={handleViewOrderDetail}>
+                                                                        View this order
+                                                               </button>
+                                                               <button className="verify-btn" onClick={handleViewOrders}>
+                                                                        View all orders
+                                                               </button>
                                                       </div>
-                                             )}
-
-                                             <div style={{ textAlign: "center", marginTop: "1rem" }}>
-                                                      <button onClick={handleBackToHome} style={{ marginRight: "0.75rem" }}>
-                                                               Back to Home
-                                                      </button>
-                                                      <button onClick={handleViewOrderDetail} style={{ marginRight: "0.75rem" }}>
-                                                               View this order in detail
-                                                      </button>
-                                                      <button onClick={handleViewOrders}>View all my orders</button>
-                                             </div>
-                                    </>
-                           )}
+                                             </>
+                                    )}
+                           </div>
                   </div>
          );
 };

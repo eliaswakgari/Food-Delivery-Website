@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
 import "./Navbar.css";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { FaShoppingCart, FaBell, FaMapMarkerAlt } from "react-icons/fa";
+import { FaShoppingCart, FaMapMarkerAlt, FaBell } from "react-icons/fa";
 import axios from "axios";
 import { useDispatch, useSelector } from "react-redux";
 import { API_BASE_URL } from "../../store/config";
-import { logout, setCredentials } from "../../store/authSlice";
+import { logout } from "../../store/authSlice";
 import { upsertNotification, markNotificationRead } from "../../store/notificationSlice";
 import { setSearchQuery as setSearchQueryAction, setCategory as setCategoryAction } from "../../store/uiSlice";
 
@@ -19,11 +19,10 @@ const Navbar = () => {
     const category = useSelector((state) => state.ui.category) || "All";
     const socket = useSelector((state) => state.socket.socket);
     const allNotifications = useSelector((state) => state.notifications.items) || [];
-    const food_list = useSelector((state) => state.food.food_list) || [];
+    const food_list = useSelector((state) => state.food.food_list);
 
     const [menuOpen, setMenuOpen] = useState(false); // avatar dropdown
     const [mobileNavOpen, setMobileNavOpen] = useState(false); // hamburger menu for small screens
-    const [pendingCount, setPendingCount] = useState(0);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [userNotifOpen, setUserNotifOpen] = useState(false);
 
@@ -31,6 +30,8 @@ const Navbar = () => {
     const userNotifications = allNotifications.filter((n) => n.role === "user");
     const adminUnreadCount = adminNotifications.filter((n) => !n.read).length;
     const userUnreadCount = userNotifications.filter((n) => !n.read).length;
+    const adminUnreadNotifications = adminNotifications.filter((n) => !n.read);
+    const userUnreadNotifications = userNotifications.filter((n) => !n.read);
 
     const navigate = useNavigate();
     const location = useLocation();
@@ -64,6 +65,13 @@ const Navbar = () => {
     };
 
     const avatarUrl = user?.avatar || null;
+    const avatarSrc = avatarUrl
+        ? avatarUrl.startsWith("http")
+            ? avatarUrl
+            : avatarUrl.startsWith("/")
+                ? `${API_BASE_URL}${avatarUrl}`
+                : `${API_BASE_URL}/images/${avatarUrl}`
+        : null;
     const initials = user?.name ? user.name.charAt(0).toUpperCase() : "U";
 
     const cartCount = cartItems
@@ -72,7 +80,8 @@ const Navbar = () => {
 
     const categories = React.useMemo(() => {
         const set = new Set();
-        food_list?.forEach((item) => {
+        const list = Array.isArray(food_list) ? food_list : [];
+        list.forEach((item) => {
             if (item.category) set.add(item.category);
         });
         return ["All", ...Array.from(set)];
@@ -88,40 +97,11 @@ const Navbar = () => {
         setMobileNavOpen(false);
     }, [location.pathname]);
 
-    // Fetch pending orders count for admin (badge on bell)
-    useEffect(() => {
-        const fetchPending = async () => {
-            if (!token || role !== "admin") return;
-            try {
-                const res = await axios.get(`${API_BASE_URL}/api/order/admin-list`, {
-                    // Use fd_token cookie for auth
-                    withCredentials: true,
-                });
-
-                if (res.data?.success && Array.isArray(res.data.data)) {
-                    const pendingOrders = res.data.data.filter(
-                        (o) => (o.status || "Pending") === "Pending"
-                    );
-
-                    setPendingCount(pendingOrders.length);
-                }
-            } catch (err) {
-                console.error("Navbar fetch error:", err);
-            }
-        };
-
-        fetchPending();
-        const id = setInterval(fetchPending, 30000);
-        return () => clearInterval(id);
-    }, [token, role]);
-
-    // Admin socket updates: real-time pending counter + notifications
+    // Admin socket updates: real-time notifications
     useEffect(() => {
         if (!socket || role !== "admin") return;
 
         const handleNewOrder = (payload = {}) => {
-            setPendingCount((prev) => prev + 1);
-
             const id = payload.orderId || payload._id;
             if (!id) return;
 
@@ -141,14 +121,6 @@ const Navbar = () => {
         };
 
         const handleStatusChanged = ({ orderId, status }) => {
-            setPendingCount((prev) => {
-                if (status === "Pending") return prev + 1;
-                if (["Preparing", "Ready", "Delivered"].includes(status)) {
-                    return prev > 0 ? prev - 1 : 0;
-                }
-                return prev;
-            });
-
             // When user confirms pickup (Delivered), notify admin explicitly
             if (status === "Delivered" && orderId) {
                 const title = `Order #${String(orderId).slice(-6)} picked up`;
@@ -173,14 +145,15 @@ const Navbar = () => {
             socket.off("order:new", handleNewOrder);
             socket.off("order:statusChanged", handleStatusChanged);
         };
-    }, [socket, role]);
+    }, [socket, role, dispatch]);
 
     // User order ready notifications (non-admin customers)
     useEffect(() => {
-        if (!socket || !user?._id || role === "admin") return;
+        const currentUserId = user?._id || user?.id;
+        if (!socket || !currentUserId || role === "admin") return;
 
         const handleUserStatusChanged = ({ userId, orderId, status }) => {
-            if (userId !== user._id || status !== "Ready") return;
+            if (userId !== currentUserId || status !== "Ready") return;
 
             dispatch(
                 upsertNotification({
@@ -246,58 +219,48 @@ const Navbar = () => {
                     </div>
 
                     <div className="navbar-amz-right">
+                        {!token ? (
+                            <button
+                                className="navbar-amz-account"
+                                onClick={() => navigate("/login")}
+                            >
+                                <span>Sign in</span>
+                                <span>Orders</span>
+                            </button>
+                        ) : (
+                            <div
+                                className="navbar-amz-profile-wrapper"
+                                onClick={() => setMenuOpen((prev) => !prev)}
+                            >
+                                <div className="navbar-amz-profile">
+                                    {avatarSrc ? (
+                                        <img
+                                            src={avatarSrc}
+                                            alt={user?.name || "Profile"}
+                                            onError={(e) => {
+                                                e.currentTarget.onerror = null;
+                                                e.currentTarget.src = "";
+                                            }}
+                                        />
+                                    ) : (
+                                        <span className="navbar-amz-profile-initials">{initials}</span>
+                                    )}
+                                </div>
 
-                        <button
-                            className="navbar-amz-account"
-                            onClick={() => navigate(token ? "/settings" : "/login")}
-                        >
-                            <span>{token ? `Hello, ${user?.name?.split(" ")[0]}` : "Hello, sign in"}</span>
-                            <span>Account & Lists</span>
-                        </button>
+                                {menuOpen && (
+                                    <div className="navbar-amz-menu">
+                                        <button onClick={handleSettings}>Settings</button>
+                                        <button onClick={handleLogout}>Logout</button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {token && (
                             <button className="navbar-amz-orders" onClick={() => navigate("/orders")}>
                                 <span>My</span>
                                 <span>Orders</span>
                             </button>
-                        )}
-
-                        {token && (
-                            <div className="navbar-notifications-wrapper">
-                                <button
-                                    className="navbar-icon-button"
-                                    onClick={() => setUserNotifOpen((prev) => !prev)}
-                                >
-                                    <FaBell />
-                                    {userUnreadCount > 0 && (
-                                        <span className="navbar-icon-badge">userUnreadCount</span>
-                                    )}
-                                </button>
-
-                                {userNotifOpen && (
-                                    <div className="navbar-notifications-panel">
-                                        <div className="navbar-notifications-header">Notifications</div>
-
-                                        {userNotifications.length === 0 ? (
-                                            <div className="navbar-notifications-empty">No new notifications</div>
-                                        ) : (
-                                            userNotifications.map((n) => (
-                                                <button
-                                                    key={n.id}
-                                                    className="navbar-notifications-item"
-                                                    onClick={() => {
-                                                        setUserNotifOpen(false);
-                                                        navigate("/orders");
-                                                    }}
-                                                >
-                                                    <span>{n.title}</span>
-                                                    <span>{n.dateLabel}</span>
-                                                </button>
-                                            ))
-                                        )}
-                                    </div>
-                                )}
-                            </div>
                         )}
 
                         <button className="navbar-amz-cart" onClick={() => navigate("/cart")}>
@@ -369,8 +332,8 @@ const Navbar = () => {
                                             onClick={() => setUserNotifOpen((prev) => !prev)}
                                         >
                                             <FaBell />
-                                            {userNotifications.length > 0 && (
-                                                <span className="navbar-icon-badge">{userNotifications.length}</span>
+                                            {userUnreadCount > 0 && (
+                                                <span className="navbar-icon-badge">{userUnreadCount > 9 ? "9+" : userUnreadCount}</span>
                                             )}
                                         </button>
 
@@ -378,10 +341,10 @@ const Navbar = () => {
                                             <div className="navbar-notifications-panel">
                                                 <div className="navbar-notifications-header">Notifications</div>
 
-                                                {userNotifications.length === 0 ? (
+                                                {userUnreadNotifications.length === 0 ? (
                                                     <div className="navbar-notifications-empty">No notifications</div>
                                                 ) : (
-                                                    globalNotifications.notifications.map((n) => (
+                                                    userUnreadNotifications.map((n) => (
                                                         <button
                                                             key={n.id}
                                                             className="navbar-notifications-item"
@@ -419,8 +382,8 @@ const Navbar = () => {
                                         onClick={() => setNotificationsOpen((prev) => !prev)}
                                     >
                                         <FaBell />
-                                        {(adminUnreadCount > 0 || pendingCount > 0) && (
-                                            <span className="navbar-icon-badge">{adminUnreadCount || pendingCount}</span>
+                                        {adminUnreadCount > 0 && (
+                                            <span className="navbar-icon-badge">{adminUnreadCount}</span>
                                         )}
                                     </button>
 
@@ -428,10 +391,10 @@ const Navbar = () => {
                                         <div className="navbar-notifications-panel">
                                             <div className="navbar-notifications-header">New Orders</div>
 
-                                            {adminNotifications.length === 0 ? (
+                                            {adminUnreadNotifications.length === 0 ? (
                                                 <div className="navbar-notifications-empty">No pending orders</div>
                                             ) : (
-                                                adminNotifications.map((n) => (
+                                                adminUnreadNotifications.map((n) => (
                                                     <button
                                                         key={n.id}
                                                         className="navbar-notifications-item"
@@ -466,7 +429,7 @@ const Navbar = () => {
                         {token && (
                             <li className="navbar-avatar-wrapper" onClick={() => setMenuOpen(!menuOpen)}>
                                 <div className="navbar-avatar">
-                                    {avatarUrl ? <img src={avatarUrl} alt="Profile" /> : <span>{initials}</span>}
+                                    {avatarSrc ? <img src={avatarSrc} alt="Profile" /> : <span>{initials}</span>}
                                 </div>
 
                                 {menuOpen && (

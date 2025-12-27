@@ -4,6 +4,14 @@ const orderModel = require('../models/orderModel');
 const userModel = require('../models/userModel');
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+const STATUS_SEQUENCE = ["Pending", "Preparing", "Ready", "Delivered"];
+
+const normalizeStatus = (status) => {
+    if (!status) return "Pending";
+    if (status === "Food Processing") return "Preparing";
+    return status;
+};
+
 const placeOrder = async (req, res) => {
     const frontend_url = process.env.FRONTEND_URL || process.env.FRONTEND_ORIGIN || "http://localhost:5173";
     try {
@@ -16,24 +24,6 @@ const placeOrder = async (req, res) => {
         });
 
         await newOrder.save();
-
-        // Notify connected clients (e.g., admin dashboard) about a new order
-        if (req.io) {
-            try {
-                req.io.emit("order:new", {
-                    orderId: newOrder._id,
-                    userId: newOrder.userId,
-                    status: newOrder.status,
-                    amount: newOrder.amount,
-                    date: newOrder.date || new Date(),
-                });
-            } catch (emitErr) {
-                console.error("Failed to emit Socket.IO new order event", emitErr);
-            }
-        }
-
-        // Clearing the user's cart after placing the order
-        await userModel.findByIdAndUpdate(req.body.userId, { cartData: {} });
         // Safeguard: compute total amount on backend and enforce minimum
         const items = Array.isArray(req.body.items) ? req.body.items : [];
 
@@ -107,6 +97,32 @@ const placeOrder = async (req, res) => {
     }
 };
 
+// Admin: get a single order
+const adminGetOrder = async (req, res) => {
+    const { id } = req.params;
+
+    if (!id) {
+        return res.status(400).json({ success: false, message: "Missing order id" });
+    }
+
+    try {
+        const order = await orderModel.findById(id);
+        if (!order) {
+            return res.status(404).json({ success: false, message: "Order not found" });
+        }
+        if (order && order.status) {
+            const normalized = normalizeStatus(order.status);
+            if (normalized !== order.status) {
+                order.status = normalized;
+            }
+        }
+        return res.status(200).json({ success: true, data: order });
+    } catch (error) {
+        console.error("Error fetching order for admin:", error);
+        return res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
 // User: list own orders
 const userListOrders = async (req, res) => {
     const userId = req.body.userId;
@@ -116,7 +132,16 @@ const userListOrders = async (req, res) => {
 
     try {
         const orders = await orderModel.find({ userId }).sort({ date: -1 });
-        return res.status(200).json({ success: true, data: orders });
+        const normalizedOrders = Array.isArray(orders)
+            ? orders.map((o) => {
+                if (o && o.status) {
+                    const normalized = normalizeStatus(o.status);
+                    if (normalized !== o.status) o.status = normalized;
+                }
+                return o;
+            })
+            : orders;
+        return res.status(200).json({ success: true, data: normalizedOrders });
     } catch (error) {
         console.error("Error listing user orders:", error);
         return res.status(500).json({ success: false, message: "Server error" });
@@ -136,24 +161,49 @@ const updateOrderStatus = async (req, res) => {
         return res.status(400).json({ success: false, message: "Missing status" });
     }
 
-    const allowedStatuses = ["Pending", "Preparing", "Ready", "Delivered"];
-    if (!allowedStatuses.includes(status)) {
+    if (!STATUS_SEQUENCE.includes(status)) {
         return res.status(400).json({
             success: false,
-            message: `Invalid status. Allowed values: ${allowedStatuses.join(", ")}`,
+            message: `Invalid status. Allowed values: ${STATUS_SEQUENCE.join(", ")}`,
         });
     }
 
     try {
-        const updated = await orderModel.findByIdAndUpdate(
-            id,
-            { status },
-            { new: true }
-        );
+        const order = await orderModel.findById(id);
 
-        if (!updated) {
+        if (!order) {
             return res.status(404).json({ success: false, message: "Order not found" });
         }
+
+        const current = normalizeStatus(order.status);
+        const target = normalizeStatus(status);
+        const currentIndex = STATUS_SEQUENCE.indexOf(current);
+        const targetIndex = STATUS_SEQUENCE.indexOf(target);
+
+        if (currentIndex === -1 || targetIndex === -1) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid order status state. Allowed values: ${STATUS_SEQUENCE.join(", ")}`,
+            });
+        }
+
+        if (targetIndex < currentIndex) {
+            return res.status(400).json({
+                success: false,
+                message: "Status cannot move backwards",
+            });
+        }
+
+        if (targetIndex > currentIndex + 1) {
+            return res.status(400).json({
+                success: false,
+                message: `Status must change in sequence. Next allowed status is: ${STATUS_SEQUENCE[currentIndex + 1]}`,
+            });
+        }
+
+        order.status = target;
+        const updated = await order.save();
+
         // Broadcast status change to all connected clients
         if (req.io) {
             try {
@@ -178,7 +228,16 @@ const updateOrderStatus = async (req, res) => {
 const adminListOrders = async (req, res) => {
     try {
         const orders = await orderModel.find({}).sort({ createdAt: -1 });
-        return res.status(200).json({ success: true, data: orders });
+        const normalizedOrders = Array.isArray(orders)
+            ? orders.map((o) => {
+                if (o && o.status) {
+                    const normalized = normalizeStatus(o.status);
+                    if (normalized !== o.status) o.status = normalized;
+                }
+                return o;
+            })
+            : orders;
+        return res.status(200).json({ success: true, data: normalizedOrders });
     } catch (error) {
         console.error('Error listing orders for admin:', error);
         return res.status(500).json({ success: false, message: 'Server error' });
@@ -261,7 +320,47 @@ const verifyOrder = async (req, res) => {
 
     try {
         if (success === 'true') {
-            await orderModel.findByIdAndUpdate(orderId, { payment: true });
+            const existing = await orderModel.findById(orderId);
+            if (!existing) {
+                return res.status(404).json({ success: false, message: 'Order not found' });
+            }
+
+            const wasPaid = !!existing.payment;
+            const updated = await orderModel.findByIdAndUpdate(orderId, { payment: true }, { new: true });
+
+            // Clear cart only after successful payment
+            try {
+                await userModel.findByIdAndUpdate(updated.userId, { cartData: {} });
+            } catch (cartErr) {
+                console.error("Failed to clear cart after payment", cartErr);
+            }
+
+            // Only emit a "new order" once (when it first becomes paid)
+            if (!wasPaid && updated && req.io) {
+                try {
+                    req.io.emit("order:new", {
+                        orderId: updated._id,
+                        userId: updated.userId,
+                        status: updated.status,
+                        amount: updated.amount,
+                        date: updated.date || new Date(),
+                    });
+                } catch (emitErr) {
+                    console.error("Failed to emit Socket.IO new order event (paid)", emitErr);
+                }
+            }
+
+            if (updated && req.io) {
+                try {
+                    req.io.emit("order:paymentUpdated", {
+                        orderId: updated._id,
+                        userId: updated.userId,
+                        payment: true,
+                    });
+                } catch (emitErr) {
+                    console.error("Failed to emit Socket.IO payment update event", emitErr);
+                }
+            }
             return res.status(200).json({ success: true, message: 'Payment verified and order updated' });
         } else {
             return res.status(200).json({ success: false, message: 'Payment not completed' });
@@ -297,8 +396,49 @@ const webhookHandler = async (req, res) => {
             const orderId = session.metadata && session.metadata.orderId;
 
             if (orderId) {
-                await orderModel.findByIdAndUpdate(orderId, { payment: true });
+                const existing = await orderModel.findById(orderId);
+                if (!existing) {
+                    console.warn('checkout.session.completed received for missing orderId:', orderId);
+                    return res.json({ received: true });
+                }
+
+                const wasPaid = !!existing.payment;
+                const updated = await orderModel.findByIdAndUpdate(orderId, { payment: true }, { new: true });
                 console.log('Order marked as paid from webhook:', orderId);
+
+                // Clear cart only after successful payment
+                try {
+                    await userModel.findByIdAndUpdate(updated.userId, { cartData: {} });
+                } catch (cartErr) {
+                    console.error("Failed to clear cart after payment (webhook)", cartErr);
+                }
+
+                // Only emit a "new order" once (when it first becomes paid)
+                if (!wasPaid && updated && req.io) {
+                    try {
+                        req.io.emit("order:new", {
+                            orderId: updated._id,
+                            userId: updated.userId,
+                            status: updated.status,
+                            amount: updated.amount,
+                            date: updated.date || new Date(),
+                        });
+                    } catch (emitErr) {
+                        console.error("Failed to emit Socket.IO new order event (webhook paid)", emitErr);
+                    }
+                }
+
+                if (updated && req.io) {
+                    try {
+                        req.io.emit("order:paymentUpdated", {
+                            orderId: updated._id,
+                            userId: updated.userId,
+                            payment: true,
+                        });
+                    } catch (emitErr) {
+                        console.error("Failed to emit Socket.IO payment update event (webhook)", emitErr);
+                    }
+                }
             } else {
                 console.warn('checkout.session.completed received without orderId metadata');
             }
@@ -311,4 +451,4 @@ const webhookHandler = async (req, res) => {
     }
 };
 
-module.exports = { placeOrder, verifyOrder, webhookHandler, adminListOrders, userListOrders, deleteOrder, updateOrderStatus, confirmOrderDelivered };
+module.exports = { placeOrder, verifyOrder, webhookHandler, adminListOrders, userListOrders, deleteOrder, updateOrderStatus, confirmOrderDelivered, adminGetOrder };

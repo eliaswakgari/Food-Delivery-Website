@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./Header.css";
 import { assets } from "../../assets/assets";
+import { useNavigate } from "react-router-dom";
 
 const slides = [
   {
@@ -43,6 +44,7 @@ const slides = [
 const AUTO_SLIDE_MS = 6000;
 
 const Header = () => {
+  const navigate = useNavigate();
   const [activeIndex, setActiveIndex] = useState(0);
 
   const goTo = (index) => {
@@ -74,7 +76,12 @@ const Header = () => {
           <p className="hero-kicker">Food delivery deals</p>
           <h2>{activeSlide.title}</h2>
           <p className="hero-subtitle">{activeSlide.subtitle}</p>
-          <button className="hero-cta">Order now</button>
+          <button className="hero-cta" onClick={() => {
+            const foodDisplay = document.getElementById('food-display');
+            if (foodDisplay) {
+              foodDisplay.scrollIntoView({ behavior: 'smooth' });
+            }
+          }}>Order now</button>
         </div>
 
         <div className="hero-image-wrapper">

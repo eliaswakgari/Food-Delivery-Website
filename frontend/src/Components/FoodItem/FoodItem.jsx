@@ -47,6 +47,13 @@ const FoodItem = ({ id, name, description, price, image }) => {
                                     </div>
                            </div>
                            <div className="food-item-info">
+                                    <div className="food-item-name-price">
+                                             <span className="food-item-name">{name}</span>
+                                             <span className="food-item-price">${price}</span>
+                                    </div>
+                                    {description && (
+                                             <p className="food-item-desc">{description}</p>
+                                    )}
                                     <div className="food-item-controls">
                                              <button type="button" onClick={handleAdd}>
                                                       Add

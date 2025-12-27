@@ -1,7 +1,6 @@
 import React, { Suspense, lazy } from "react";
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Navbar from "./Components/Navbar/Navbar";
 import Footer from "./Components/Footer/Footer";
 import ErrorBoundary from "./Components/ErrorBoundary/ErrorBoundary";
 import AuthBootstrap from "./Components/Auth/AuthBootstrap";
@@ -54,12 +53,11 @@ const App = () => {
          const theme = useSelector((state) => state.ui.theme) || "light";
          const appClass = `app theme-${theme}`;
          const location = useLocation();
-         const hideChrome = ["/login", "/forgot-password", "/reset-password"].includes(location.pathname);
+         const hideChrome = ["/login", "/forgot-password", "/reset-password", "/settings"].includes(location.pathname);
          const hideFooter = hideChrome || location.pathname.startsWith("/admin");
          return (
                   <div className={appClass}>
                            <AuthBootstrap />
-                           {!hideChrome && <Navbar />}
                            <ErrorBoundary>
                                     <Suspense fallback={<div style={{ padding: "2rem", textAlign: "center" }}>Loading...</div>}>
                                              <Routes>
@@ -102,6 +100,14 @@ const App = () => {
                                                       <Route path="/reset-password" element={<ResetPassword />} />
                                                       <Route
                                                                path="/admin"
+                                                               element={
+                                                                        <AdminRoute>
+                                                                                 <Admin />
+                                                                        </AdminRoute>
+                                                               }
+                                                      />
+                                                      <Route
+                                                               path="/admin/orders/:orderId"
                                                                element={
                                                                         <AdminRoute>
                                                                                  <Admin />

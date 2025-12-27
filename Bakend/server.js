@@ -1,3 +1,4 @@
+
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
@@ -55,14 +56,14 @@ app.use(
 // Initialize Passport (for Google OAuth)
 app.use(passport.initialize());
 
-// Stripe webhook must use raw body (no JSON parsing)
-app.post("/api/order/webhook", express.raw({ type: "application/json" }), webhookHandler);
-
-// Attach io to req for normal JSON routes
+// Attach io to req for normal JSON routes and webhook handler
 app.use((req, res, next) => {
   req.io = io;
   next();
 });
+
+// Stripe webhook must use raw body (no JSON parsing)
+app.post("/api/order/webhook", express.raw({ type: "application/json" }), webhookHandler);
 
 // Normal JSON body parsing for other routes
 app.use(bodyParser.json());
@@ -101,3 +102,4 @@ connectDB()
   .catch((err) => {
     console.error("Failed to connect to database:", err);
   });
+

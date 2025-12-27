@@ -1,9 +1,11 @@
-import React from "react";
 import "./Cart.css";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { API_BASE_URL } from "../../store/config";
 import { removeFromCart } from "../../store/cartSlice";
+
+const FALLBACK_IMG_SRC =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Crect width='120' height='120' rx='16' fill='%23f1f5f9'/%3E%3Cpath d='M35 78l14-18 10 12 10-12 16 18H35z' fill='%2394a3b8'/%3E%3Ccircle cx='48' cy='46' r='7' fill='%2394a3b8'/%3E%3C/svg%3E";
 
 const Cart = () => {
   const dispatch = useDispatch();
@@ -37,10 +39,25 @@ const Cart = () => {
         <hr />
         {food_list.map((item, index) => {
           if (cartItems[item._id]) {
+            const imageSrc = item.image
+              ? item.image.startsWith("http")
+                ? item.image
+                : item.image.startsWith("/")
+                  ? `${API_BASE_URL}${item.image}`
+                  : `${API_BASE_URL}/images/${item.image}`
+              : FALLBACK_IMG_SRC;
+
             return (
               <div key={item._id || index}>
                 <div className="cart-items-title cart-items-item">
-                  <img src={`${API_BASE_URL}/images/${item.image}`} alt="" />
+                  <img
+                    src={imageSrc}
+                    alt={item.name || "Food"}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = FALLBACK_IMG_SRC;
+                    }}
+                  />
                   <p>{item.name}</p>
                   <p>${item.price}</p>
                   <p>{cartItems[item._id]}</p>
@@ -83,15 +100,6 @@ const Cart = () => {
               PROCEED TO CHECKOUT
             </button>
           )}
-        </div>
-        <div className="cart-promo-code">
-          <div>
-            <p>If you have promo code,Enter it here.</p>
-            <div className="cart-promo-code-input">
-              <input type="text" placeholder="promo code" />
-              <button>Submit</button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

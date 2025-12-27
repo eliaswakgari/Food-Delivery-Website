@@ -1,5 +1,6 @@
 const foodModel = require("../models/foodModel.js");
 const fs = require("fs");
+const path = require("path");
 const cloudinary = require("cloudinary").v2;
 
 // Configure Cloudinary from environment variables if available
@@ -30,16 +31,31 @@ const addFood = async (req, res) => {
         );
 
         if (hasCloudinaryConfig) {
-            // Prefer req.file.path if multer is configured with a destination
-            const localPath = req.file.path || `uploads/${req.file.filename}`;
-            const uploadRes = await cloudinary.uploader.upload(localPath, {
-                folder: "food-items",
-            });
-            imageUrl = uploadRes.secure_url;
+            // Use req.file.path which multer provides (absolute path)
+            const localPath = req.file.path;
+            
+            // Check if file exists before uploading to Cloudinary
+            if (!fs.existsSync(localPath)) {
+                return res.status(500).json({ 
+                    success: false, 
+                    message: 'Uploaded file not found. Please try again.' 
+                });
+            }
 
-            // Clean up local file
-            if (localPath) {
-                fs.unlink(localPath, () => {});
+            try {
+                const uploadRes = await cloudinary.uploader.upload(localPath, {
+                    folder: "food-items",
+                });
+                imageUrl = uploadRes.secure_url;
+
+                // Clean up local file after successful upload
+                fs.unlink(localPath, (err) => {
+                    if (err) console.error('Error deleting local file:', err);
+                });
+            } catch (cloudinaryError) {
+                console.error('Cloudinary upload error:', cloudinaryError);
+                // If Cloudinary fails, fall back to local file
+                imageUrl = req.file.filename;
             }
         } else {
             // Fallback: keep using local filename
@@ -78,7 +94,20 @@ const listFood=async(req,res)=>{
 const removeFood=async(req,res)=>{
     try {
         const food=await foodModel.findById(req.body.id)
-        fs.unlink(`uploads/${food.image}`,()=>{})
+        if (!food) {
+            return res.status(404).json({success:false,message:'Food item not found'})
+        }
+        
+        // Only delete local file if it's not a Cloudinary URL (doesn't start with http)
+        if (food.image && !food.image.startsWith('http')) {
+            const imagePath = path.join(__dirname, '../uploads', food.image);
+            if (fs.existsSync(imagePath)) {
+                fs.unlink(imagePath, (err) => {
+                    if (err) console.error('Error deleting image file:', err);
+                });
+            }
+        }
+        
         await foodModel.findByIdAndDelete(req.body.id)
         return res.status(201).json({success:true,message:'Food deleted successfully'})
     } catch (error) {

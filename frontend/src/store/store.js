@@ -26,6 +26,7 @@ const store = configureStore({
 // Persist auth slice to cookies so refresh does not log the user out
 if (typeof window !== "undefined") {
   let previous = store.getState().auth;
+  let prevNotifications = store.getState().notifications;
   store.subscribe(() => {
     const current = store.getState().auth;
     if (current === previous) return;
@@ -54,6 +55,20 @@ if (typeof window !== "undefined") {
 
     if (user) setCookie("fd_user", JSON.stringify(user));
     else clearCookie("fd_user");
+  });
+
+  // Persist notifications (read/unread) to localStorage for consistency across refresh
+  store.subscribe(() => {
+    const current = store.getState().notifications;
+    if (current === prevNotifications) return;
+    prevNotifications = current;
+
+    try {
+      const items = Array.isArray(current?.items) ? current.items : [];
+      window.localStorage.setItem("fd_notifications", JSON.stringify(items.slice(0, 50)));
+    } catch {
+      // ignore localStorage failures
+    }
   });
 }
 

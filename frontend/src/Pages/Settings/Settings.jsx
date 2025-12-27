@@ -1,28 +1,44 @@
 import React, { useEffect, useState } from "react";
 import "./Settings.css";
 import axios from "axios";
-import { FaMoon, FaSun } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../../store/config";
-import { setTheme } from "../../store/uiSlice";
 import { setCredentials } from "../../store/authSlice";
+
+const getImageSrc = (image) => {
+         if (!image) return "";
+         if (typeof image !== "string") return "";
+         if (image.startsWith("blob:")) return image;
+         if (image.startsWith("data:")) return image;
+         if (image.startsWith("http")) return image;
+         if (image.startsWith("/")) return `${API_BASE_URL}${image}`;
+         return `${API_BASE_URL}/images/${image}`;
+};
 
 const Settings = () => {
          const dispatch = useDispatch();
+         const navigate = useNavigate();
          const token = useSelector((state) => state.auth.token);
          const user = useSelector((state) => state.auth.user);
-         const theme = useSelector((state) => state.ui.theme);
+         const role = useSelector((state) => state.auth.role);
 
+         // Profile form state
          const [name, setName] = useState("");
          const [email, setEmail] = useState("");
+         const [avatarPreview, setAvatarPreview] = useState("");
+         const [avatarFile, setAvatarFile] = useState(null);
+         const [profileLoading, setProfileLoading] = useState(false);
+         const [profileMessage, setProfileMessage] = useState("");
+         const [profileError, setProfileError] = useState("");
+
+         // Password form state
          const [currentPassword, setCurrentPassword] = useState("");
          const [newPassword, setNewPassword] = useState("");
          const [confirmNewPassword, setConfirmNewPassword] = useState("");
-         const [avatarPreview, setAvatarPreview] = useState("");
-         const [avatarFile, setAvatarFile] = useState(null);
-         const [loading, setLoading] = useState(false);
-         const [message, setMessage] = useState("");
-         const [error, setError] = useState("");
+         const [passwordLoading, setPasswordLoading] = useState(false);
+         const [passwordMessage, setPasswordMessage] = useState("");
+         const [passwordError, setPasswordError] = useState("");
 
          useEffect(() => {
                   if (user) {
@@ -40,17 +56,30 @@ const Settings = () => {
          };
 
          const uploadAvatarToCloudinary = async () => {
-                  // If no new file was selected, keep whatever avatar the user already had.
                   if (!avatarFile) return avatarPreview || "";
 
                   const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
                   const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-                  // If Cloudinary is not configured, do not attempt to upload and do not
-                  // change the persisted avatar (return empty string so backend ignores it).
                   if (!cloudName || !uploadPreset) {
-                           console.warn("Cloudinary env variables are missing; skipping avatar upload.");
-                           return "";
+                           // Fallback: upload to backend local storage
+                           try {
+                                    const formData = new FormData();
+                                    formData.append("avatar", avatarFile);
+
+                                    const res = await axios.post(`${API_BASE_URL}/api/user/avatar`, formData, {
+                                             withCredentials: true,
+                                             headers: { "Content-Type": "multipart/form-data" },
+                                    });
+
+                                    if (res.data?.success && res.data.avatar) {
+                                             return res.data.avatar;
+                                    }
+                                    return "";
+                           } catch (err) {
+                                    console.error("Backend avatar upload error", err);
+                                    return "";
+                           }
                   }
 
                   const formData = new FormData();
@@ -65,65 +94,58 @@ const Settings = () => {
 
                            if (!res.ok) {
                                     console.error("Avatar upload failed with status", res.status);
-                                    // Fallback: do not change avatar if upload fails
                                     return "";
                            }
 
                            const data = await res.json();
-                           // Only ever persist a real URL from Cloudinary, never a blob:
                            return data.secure_url || "";
                   } catch (err) {
                            console.error("Avatar upload error", err);
-                           // Fallback: keep existing avatar on any error by not sending a new value
                            return "";
                   }
          };
 
-         const handleSubmit = async (e) => {
+         const handleProfileSubmit = async (e) => {
                   e.preventDefault();
-                  setError("");
-                  setMessage("");
-
-                  const wantsPasswordChange = newPassword || confirmNewPassword;
-
-                  if (wantsPasswordChange && (!currentPassword || !newPassword || !confirmNewPassword)) {
-                           setError("Please fill current, new, and confirm password to change password");
-                           return;
-                  }
-
-                  if (wantsPasswordChange && newPassword !== confirmNewPassword) {
-                           setError("Passwords do not match");
-                           return;
-                  }
+                  setProfileError("");
+                  setProfileMessage("");
 
                   if (!token) {
-                           setError("You must be logged in to update your profile");
+                           setProfileError("You must be logged in to update your profile");
+                           return;
+                  }
+
+                  if (!name || !name.trim()) {
+                           setProfileError("Name is required");
                            return;
                   }
 
                   try {
-                           setLoading(true);
+                           setProfileLoading(true);
 
-                           let avatarUrl = avatarPreview || "";
+                           const isBlobUrl = (url) => typeof url === "string" && url.startsWith("blob:");
+                           let avatarUrl = user?.avatar || "";
+
                            if (avatarFile) {
-                                    avatarUrl = await uploadAvatarToCloudinary();
-                           }
-
-                           const payload = {
-                                    name,
-                                    avatar: avatarUrl,
-                           };
-
-                           if (wantsPasswordChange) {
-                                    payload.password = newPassword;
-                                    payload.currentPassword = currentPassword;
+                                    const uploaded = await uploadAvatarToCloudinary();
+                                    if (!uploaded) {
+                                             setProfileError(
+                                                      "Avatar upload failed. Please configure Cloudinary env variables (VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET) or try again."
+                                             );
+                                             return;
+                                    }
+                                    avatarUrl = uploaded;
+                           } else if (avatarPreview && !isBlobUrl(avatarPreview)) {
+                                    avatarUrl = avatarPreview;
                            }
 
                            const res = await axios.put(
                                     `${API_BASE_URL}/api/user/profile`,
-                                    payload,
                                     {
-                                             // Use fd_token cookie for auth
+                                             name: name.trim(),
+                                             avatar: avatarUrl,
+                                    },
+                                    {
                                              withCredentials: true,
                                     }
                            );
@@ -133,70 +155,110 @@ const Settings = () => {
                                     dispatch(
                                              setCredentials({
                                                       token,
-                                                      role: user?.role,
+                                                      role: role || user?.role,
                                                       user: updatedUser,
                                              })
                                     );
-                                    setMessage("Profile updated successfully");
+                                    setProfileMessage("Profile updated successfully");
+                                    setAvatarFile(null);
+                                    setAvatarPreview(updatedUser.avatar || avatarUrl || "");
                            } else {
-                                    setError(res.data.message || "Failed to update profile");
+                                    setProfileError(res.data.message || "Failed to update profile");
                            }
                   } catch (err) {
                            const backendMessage = err?.response?.data?.message;
-                           setError(backendMessage || "Error updating profile");
+                           setProfileError(backendMessage || "Error updating profile");
                   } finally {
-                           setLoading(false);
+                           setProfileLoading(false);
                   }
          };
 
-         const handleThemeToggle = () => {
-                  dispatch(setThemeAction(theme === "dark" ? "light" : "dark"));
+         const handlePasswordSubmit = async (e) => {
+                  e.preventDefault();
+                  setPasswordError("");
+                  setPasswordMessage("");
+
+                  if (!currentPassword || !newPassword || !confirmNewPassword) {
+                           setPasswordError("All password fields are required");
+                           return;
+                  }
+
+                  if (newPassword !== confirmNewPassword) {
+                           setPasswordError("New passwords do not match");
+                           return;
+                  }
+
+                  if (newPassword.length < 8) {
+                           setPasswordError("Password must be at least 8 characters long");
+                           return;
+                  }
+
+                  if (!token) {
+                           setPasswordError("You must be logged in to update your password");
+                           return;
+                  }
+
+                  try {
+                           setPasswordLoading(true);
+
+                           const res = await axios.put(
+                                    `${API_BASE_URL}/api/user/password`,
+                                    {
+                                             currentPassword,
+                                             newPassword,
+                                    },
+                                    {
+                                             withCredentials: true,
+                                    }
+                           );
+
+                           if (res.data && res.data.success) {
+                                    setPasswordMessage("Password updated successfully");
+                                    setCurrentPassword("");
+                                    setNewPassword("");
+                                    setConfirmNewPassword("");
+                           } else {
+                                    setPasswordError(res.data.message || "Failed to update password");
+                           }
+                  } catch (err) {
+                           const backendMessage = err?.response?.data?.message;
+                           setPasswordError(backendMessage || "Error updating password");
+                  } finally {
+                           setPasswordLoading(false);
+                  }
          };
 
          return (
-                  <div className="settings-page">
-                           <h2 className="settings-title">Account Settings</h2>
+                  <div className={`settings-page-wrapper ${role === "admin" ? "settings-admin" : ""}`}>
+                           <div className="settings-header">
+                                    <button 
+                                             className="settings-back-button"
+                                             onClick={() => navigate(role === "admin" ? "/admin" : "/")}
+                                    >
+                                             ← {role === "admin" ? "Back to Admin Dashboard" : "Back to Home"}
+                                    </button>
+                           </div>
+                           <div className="settings-page">
+                                    <h2 className="settings-title">Account Settings</h2>
 
+                           {/* Profile Update Section */}
                            <section className="settings-section">
-                                    <h3 className="settings-section-title">Profile</h3>
-                                    <form onSubmit={handleSubmit} className="settings-form">
+                                    <h3 className="settings-section-title">Profile Information</h3>
+                                    <form onSubmit={handleProfileSubmit} className="settings-form">
                                              <label>
                                                       Name
-                                                      <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
+                                                      <input 
+                                                               type="text" 
+                                                               value={name} 
+                                                               onChange={(e) => setName(e.target.value)} 
+                                                               required 
+                                                               placeholder="Enter your name"
+                                                      />
                                              </label>
 
                                              <label>
                                                       Email
                                                       <input type="email" value={email} disabled />
-                                             </label>
-
-                                             <label>
-                                                      Current Password
-                                                      <input
-                                                               type="password"
-                                                               value={currentPassword}
-                                                               onChange={(e) => setCurrentPassword(e.target.value)}
-                                                               placeholder="Required only when changing password"
-                                                      />
-                                             </label>
-
-                                             <label>
-                                                      New Password
-                                                      <input
-                                                               type="password"
-                                                               value={newPassword}
-                                                               onChange={(e) => setNewPassword(e.target.value)}
-                                                               placeholder="Leave blank to keep current password"
-                                                      />
-                                             </label>
-
-                                             <label>
-                                                      Confirm New Password
-                                                      <input
-                                                               type="password"
-                                                               value={confirmNewPassword}
-                                                               onChange={(e) => setConfirmNewPassword(e.target.value)}
-                                                      />
                                              </label>
 
                                              <label>
@@ -206,37 +268,68 @@ const Settings = () => {
 
                                              {avatarPreview && (
                                                       <div className="settings-avatar-preview">
-                                                               <img src={avatarPreview} alt="Avatar preview" />
+                                                               <img src={getImageSrc(avatarPreview)} alt="Avatar preview" />
                                                       </div>
                                              )}
 
-                                             {error && <p className="settings-error">{error}</p>}
-                                             {message && <p className="settings-message">{message}</p>}
+                                             {profileError && <p className="settings-error">{profileError}</p>}
+                                             {profileMessage && <p className="settings-message">{profileMessage}</p>}
 
-                                             <button type="submit" disabled={loading} className="settings-save-btn">
-                                                      {loading ? "Saving..." : "Save Changes"}
+                                             <button type="submit" disabled={profileLoading} className="settings-save-btn">
+                                                      {profileLoading ? "Saving..." : "Update Profile"}
                                              </button>
                                     </form>
                            </section>
 
+                           {/* Password Update Section */}
                            <section className="settings-section">
-                                    <h3 className="settings-section-title">Appearance</h3>
-                                    <div className="theme-toggle">
-                                             <span>Theme:</span>
-                                             <button type="button" onClick={handleThemeToggle} className="theme-toggle-btn">
-                                                      {theme === "dark" ? (
-                                                               <>
-                                                                        <FaSun /> <span>Light</span>
-                                                               </>
-                                                      ) : (
-                                                               <>
-                                                                        <FaMoon /> <span>Dark</span>
-                                                               </>
-                                                      )}
+                                    <h3 className="settings-section-title">Change Password</h3>
+                                    <form onSubmit={handlePasswordSubmit} className="settings-form">
+                                             <label>
+                                                      Current Password
+                                                      <input
+                                                               type="password"
+                                                               value={currentPassword}
+                                                               onChange={(e) => setCurrentPassword(e.target.value)}
+                                                               placeholder="Enter current password"
+                                                               required
+                                                      />
+                                             </label>
+
+                                             <label>
+                                                      New Password
+                                                      <input
+                                                               type="password"
+                                                               value={newPassword}
+                                                               onChange={(e) => setNewPassword(e.target.value)}
+                                                               placeholder="Enter new password (min 8 characters)"
+                                                               required
+                                                               minLength={8}
+                                                      />
+                                             </label>
+
+                                             <label>
+                                                      Confirm New Password
+                                                      <input
+                                                               type="password"
+                                                               value={confirmNewPassword}
+                                                               onChange={(e) => setConfirmNewPassword(e.target.value)}
+                                                               placeholder="Confirm new password"
+                                                               required
+                                                               minLength={8}
+                                                      />
+                                             </label>
+
+                                             {passwordError && <p className="settings-error">{passwordError}</p>}
+                                             {passwordMessage && <p className="settings-message">{passwordMessage}</p>}
+
+                                             <button type="submit" disabled={passwordLoading} className="settings-save-btn">
+                                                      {passwordLoading ? "Updating..." : "Update Password"}
                                              </button>
-                                    </div>
+                                    </form>
                            </section>
-                  </div >
+                           </div>
+                  </div>
          );
 };
 

@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 import { assets } from "../../assets/assets";
 import axios from "axios";
-import { MdDashboard, MdAddCircleOutline, MdListAlt, MdReceiptLong, MdInsights, MdMenu, MdMenuOpen, MdPerson, MdNotificationsNone } from "react-icons/md";
+import { MdDashboard, MdAddCircleOutline, MdListAlt, MdReceiptLong, MdInsights, MdMenu, MdMenuOpen, MdPerson, MdNotificationsNone, MdAttachMoney, MdTaskAlt, MdPendingActions, MdTrendingUp } from "react-icons/md";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { API_BASE_URL } from "../../store/config";
@@ -10,20 +10,38 @@ import { fetchFood, setFoodList } from "../../store/foodSlice";
 import { logout } from "../../store/authSlice";
 import { upsertNotification, markNotificationRead } from "../../store/notificationSlice";
 
+const STATUS_SEQUENCE = ["Pending", "Preparing", "Ready", "Delivered"];
+
+const normalizeStatus = (status) => {
+  if (!status) return "Pending";
+  if (status === "Food Processing") return "Preparing";
+  return status;
+};
+
+const getImageSrc = (image) => {
+  if (!image) return null;
+  if (typeof image !== "string") return null;
+  if (image.startsWith("http")) return image;
+  if (image.startsWith("/")) return `${API_BASE_URL}${image}`;
+  return `${API_BASE_URL}/images/${image}`;
+};
+
 const Admin = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { orderId: notifOrderIdParam } = useParams();
+  const { orderId: routeOrderIdParam } = useParams();
   const [active, setActive] = useState("dashboard");
   const dispatch = useDispatch();
   const user = useSelector((state) => state.auth.user);
-  const food_list = useSelector((state) => state.food.food_list) || [];
-  const allNotifications = useSelector((state) => state.notifications.items) || [];
+  const socket = useSelector((state) => state.socket.socket);
+  const food_list = useSelector((state) => state.food.food_list);
+  const allNotifications = useSelector((state) => state.notifications.items);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [highlightedOrderId, setHighlightedOrderId] = useState(null);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [notifFilter, setNotifFilter] = useState("unread"); // all | unread | read
   const [selectedNotifOrder, setSelectedNotifOrder] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState(null);
   const [headerNotifOpen, setHeaderNotifOpen] = useState(false);
   const [orders, setOrders] = useState([]);
   const [addForm, setAddForm] = useState({
@@ -36,13 +54,40 @@ const Admin = () => {
   const [addStatus, setAddStatus] = useState("");
   const [orderFilter, setOrderFilter] = useState("all"); // all | today | week | month | year
 
-  const adminUnreadCount = allNotifications.filter(
+  const notificationsList = useMemo(
+    () => (Array.isArray(allNotifications) ? allNotifications : []),
+    [allNotifications]
+  );
+
+  const adminUnreadCount = notificationsList.filter(
     (n) => n.role === "admin" && !n.read
   ).length;
 
-  const adminUnreadNotifications = allNotifications.filter(
+  const adminTotalCount = notificationsList.filter((n) => n.role === "admin").length;
+  const adminReadCount = Math.max(0, adminTotalCount - adminUnreadCount);
+
+  const adminUnreadNotifications = notificationsList.filter(
     (n) => n.role === "admin" && !n.read
   );
+
+  const adminNotificationsFiltered = useMemo(() => {
+    const list = notificationsList.filter((n) => n.role === "admin");
+    const filtered = list.filter((n) => {
+      if (notifFilter === "all") return true;
+      if (notifFilter === "unread") return !n.read;
+      if (notifFilter === "read") return !!n.read;
+      return true;
+    });
+
+    // Sort newest first using dateLabel if possible, fallback to stable order
+    return filtered
+      .slice()
+      .sort((a, b) => {
+        const da = new Date(a.dateLabel || 0).getTime();
+        const db = new Date(b.dateLabel || 0).getTime();
+        return db - da;
+      });
+  }, [notificationsList, notifFilter]);
 
   // When navigated with ?orderId=... from navbar notification, focus Orders tab
   useEffect(() => {
@@ -60,28 +105,138 @@ const Admin = () => {
     return () => clearTimeout(timeout);
   }, [location.search]);
 
+  const isOrdersRoute = location.pathname.startsWith("/admin/orders/");
+  const isNotificationsRoute = location.pathname.startsWith("/admin/notifications/");
+  const routeOrderId = isOrdersRoute ? routeOrderIdParam : null;
+  const routeNotificationOrderId = isNotificationsRoute ? routeOrderIdParam : null;
+
+  const getNextStatus = (status) => {
+    const s = normalizeStatus(status);
+    const idx = STATUS_SEQUENCE.indexOf(s);
+    if (idx === -1) return null;
+    return STATUS_SEQUENCE[idx + 1] || null;
+  };
+
+  const statusPillClass = (status) => {
+    const s = normalizeStatus(status).toLowerCase();
+    if (s === "pending") return "admin-dashboard-status-pill status-pending";
+    if (s === "preparing") return "admin-dashboard-status-pill status-preparing";
+    if (s === "ready") return "admin-dashboard-status-pill status-ready";
+    if (s === "delivered") return "admin-dashboard-status-pill status-delivered";
+    return "admin-dashboard-status-pill";
+  };
+
+  const fetchOrderDetail = async (id) => {
+    if (!id) return null;
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/order/admin-order/${id}`, {
+        withCredentials: true,
+      });
+      if (res.data && res.data.success && res.data.data) {
+        return res.data.data;
+      }
+    } catch (err) {
+      console.error("Failed to load order detail", err);
+    }
+    return null;
+  };
+
+  const handleStatusUpdate = async (orderId, nextStatus) => {
+    if (!orderId || !nextStatus) return;
+    try {
+      const res = await axios.patch(
+        `${API_BASE_URL}/api/order/admin-order/${orderId}/status`,
+        { status: nextStatus },
+        { withCredentials: true }
+      );
+      if (res.data && res.data.success && res.data.data) {
+        const updated = res.data.data;
+        setOrders((prev) => (Array.isArray(prev) ? prev : []).map((o) => (o._id === updated._id ? updated : o)));
+        setSelectedOrder((prev) => (prev && prev._id === updated._id ? updated : prev));
+        setSelectedNotifOrder((prev) => (prev && prev._id === updated._id ? updated : prev));
+      }
+    } catch (err) {
+      console.error("Failed to update order status", err);
+    }
+  };
+
+  // When visiting /admin/orders/:orderId directly, open order details
+  useEffect(() => {
+    const open = async () => {
+      if (!routeOrderId) return;
+      setActive("orders");
+      const order = await fetchOrderDetail(routeOrderId);
+      if (order) setSelectedOrder(order);
+    };
+    open();
+  }, [routeOrderId]);
+
   // When visiting /admin/notifications/:orderId directly, focus Notifications detail view
   useEffect(() => {
-    if (!notifOrderIdParam) return;
-    setActive("notifications");
-    if (!orders || orders.length === 0) return;
-    const match = orders.find((o) => o._id === notifOrderIdParam);
-    if (match) {
-      setSelectedNotifOrder(match);
-    }
-  }, [notifOrderIdParam, orders]);
+    const open = async () => {
+      if (!routeNotificationOrderId) return;
+      setActive("notifications");
+      dispatch(markNotificationRead({ id: routeNotificationOrderId, role: "admin" }));
+      const order = await fetchOrderDetail(routeNotificationOrderId);
+      if (order) setSelectedNotifOrder(order);
+    };
+    open();
+  }, [routeNotificationOrderId, dispatch]);
 
-  // Helper to focus a specific order inside the Orders tab from within Admin
-  const focusOrderRow = (orderId) => {
-    if (!orderId) return;
-    setActive("orders");
-    setHighlightedOrderId(orderId);
+  // Realtime updates inside Admin panel
+  useEffect(() => {
+    if (!socket) return;
 
-    // Clear highlight after a short delay so the UI returns to normal
-    setTimeout(() => {
-      setHighlightedOrderId((current) => (current === orderId ? null : current));
-    }, 4000);
-  };
+    const onNewOrder = (payload = {}) => {
+      const orderId = payload.orderId || payload._id;
+      if (!orderId) return;
+
+      const title = payload.title || "New order";
+      const dateLabel = new Date(payload.date || Date.now()).toLocaleString();
+
+      dispatch(
+        upsertNotification({
+          id: orderId,
+          role: "admin",
+          title,
+          dateLabel,
+          status: payload.status || "Pending",
+          read: false,
+        })
+      );
+
+      // Pull latest list so dashboard/orders are accurate
+      setOrders((prev) => {
+        if (!Array.isArray(prev)) return prev;
+        if (prev.some((o) => o._id === orderId)) return prev;
+        return prev;
+      });
+    };
+
+    const onPaymentUpdated = ({ orderId, payment }) => {
+      if (!orderId) return;
+      setOrders((prev) => (Array.isArray(prev) ? prev.map((o) => (o._id === orderId ? { ...o, payment: !!payment } : o)) : prev));
+      setSelectedOrder((prev) => (prev && prev._id === orderId ? { ...prev, payment: !!payment } : prev));
+      setSelectedNotifOrder((prev) => (prev && prev._id === orderId ? { ...prev, payment: !!payment } : prev));
+    };
+
+    const onStatusChanged = ({ orderId, status }) => {
+      if (!orderId) return;
+      setOrders((prev) => (Array.isArray(prev) ? prev.map((o) => (o._id === orderId ? { ...o, status } : o)) : prev));
+      setSelectedOrder((prev) => (prev && prev._id === orderId ? { ...prev, status } : prev));
+      setSelectedNotifOrder((prev) => (prev && prev._id === orderId ? { ...prev, status } : prev));
+    };
+
+    socket.on("order:new", onNewOrder);
+    socket.on("order:paymentUpdated", onPaymentUpdated);
+    socket.on("order:statusChanged", onStatusChanged);
+
+    return () => {
+      socket.off("order:new", onNewOrder);
+      socket.off("order:paymentUpdated", onPaymentUpdated);
+      socket.off("order:statusChanged", onStatusChanged);
+    };
+  }, [socket, dispatch]);
 
   const categories = React.useMemo(() => {
     // Most common restaurant categories (curated, max ~13)
@@ -102,9 +257,10 @@ const Admin = () => {
     ];
 
     const set = new Set(base);
+    const list = Array.isArray(food_list) ? food_list : [];
 
     // Also include any extra categories that already exist in the database
-    food_list.forEach((item) => {
+    list.forEach((item) => {
       if (item && item.category) {
         set.add(item.category);
       }
@@ -404,13 +560,13 @@ const Admin = () => {
     if (active === "add") {
       return (
         <div className="admin-modal-backdrop">
-          <div className="admin-modal">
+          <div className="admin-modal admin-modal-scroll">
             <h1>Add Items</h1>
             <form className="admin-add-form" onSubmit={handleAddSubmit}>
               <input
                 type="text"
+                placeholder="Food name"
                 name="name"
-                placeholder="Name"
                 value={addForm.name}
                 onChange={handleAddChange}
                 required
@@ -503,6 +659,95 @@ const Admin = () => {
     if (active === "orders") {
       const filteredOrders = applyOrderFilter(orders);
 
+      const handleOpenOrder = async (id) => {
+        if (!id) return;
+        navigate(`/admin/orders/${id}`);
+        const order = await fetchOrderDetail(id);
+        if (order) setSelectedOrder(order);
+      };
+
+      const handleBackToOrders = () => {
+        setSelectedOrder(null);
+        navigate("/admin");
+      };
+
+      if (selectedOrder) {
+        const status = normalizeStatus(selectedOrder.status);
+        const next = getNextStatus(status);
+        const items = Array.isArray(selectedOrder.items) ? selectedOrder.items : [];
+
+        return (
+          <>
+            <h1>Order Details</h1>
+            <div className="admin-notification-detail-header">
+              <button type="button" className="admin-back-button" onClick={handleBackToOrders}>
+                Back to Orders
+              </button>
+            </div>
+
+            <div className="admin-order-detail">
+              <div className="admin-order-detail-card">
+                <h2>Order #{String(selectedOrder._id).slice(-6)}</h2>
+
+                <div className="admin-order-detail-info">
+                  <div className="admin-order-detail-row">
+                    <span>Status</span>
+                    <span className={statusPillClass(status)}>{status}</span>
+                  </div>
+                  <div className="admin-order-detail-row">
+                    <span>Paid</span>
+                    <span>{selectedOrder.payment ? "Yes" : "No"}</span>
+                  </div>
+                  <div className="admin-order-detail-row">
+                    <span>Amount</span>
+                    <span>${Number(selectedOrder.amount || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="admin-order-detail-row">
+                    <span>Date</span>
+                    <span>{new Date(selectedOrder.date || selectedOrder.createdAt || Date.now()).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {next && (
+                  <button
+                    type="button"
+                    className="admin-mark-read-button"
+                    onClick={() => handleStatusUpdate(selectedOrder._id, next)}
+                  >
+                    Move to {next}
+                  </button>
+                )}
+
+                {items.length > 0 && (
+                  <div className="admin-order-items">
+                    <h3>Items</h3>
+                    <div className="admin-order-items-list">
+                      {items.map((it, idx) => {
+                        const img = getImageSrc(it.image);
+                        return (
+                          <div className="admin-order-item" key={`${it._id || idx}`}
+                          >
+                            {img ? (
+                              <img className="admin-order-item-image" src={img} alt={it.name || "Item"} />
+                            ) : null}
+                            <div className="admin-order-item-info">
+                              <div className="admin-order-item-name">{it.name}</div>
+                              <div className="admin-order-item-price">
+                                x{Number(it.quantity || 1)} • ${Number(it.price || 0).toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        );
+      }
+
       return (
         <>
           <h1>Orders</h1>
@@ -560,22 +805,25 @@ const Admin = () => {
                     const firstItem = o.items && o.items.length > 0 ? o.items[0] : null;
                     const dateObj = new Date(o.date || o.createdAt);
                     const dateLabel = dateObj.toLocaleDateString();
+                    const imgSrc = firstItem ? getImageSrc(firstItem.image) : null;
                     return (
                       <tr
                         key={o._id}
                         className={highlightedOrderId === o._id ? "admin-order-row-highlight" : ""}
+                        onClick={() => handleOpenOrder(o._id)}
+                        style={{ cursor: "pointer" }}
                       >
                         <td>{index + 1}</td>
                         <td>{firstItem ? firstItem.name : "-"}</td>
                         <td>{o.userId}</td>
                         <td>{dateLabel}</td>
-                        <td>{o.status || "Pending"}</td>
+                        <td><span className={statusPillClass(o.status)}>{normalizeStatus(o.status)}</span></td>
                         <td>{o.amount}</td>
                         <td>{o.payment ? "Yes" : "No"}</td>
                         <td>
-                          {firstItem && firstItem.image && (
+                          {imgSrc && (
                             <img
-                              src={firstItem.image}
+                              src={imgSrc}
                               alt={firstItem.name}
                               style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "4px" }}
                             />
@@ -583,7 +831,14 @@ const Admin = () => {
                         </td>
                         <td>{firstItem && firstItem._id ? firstItem._id : "-"}</td>
                         <td>
-                          <button onClick={() => handleDeleteOrder(o._id)}>Delete</button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteOrder(o._id);
+                            }}
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     );
@@ -601,19 +856,277 @@ const Admin = () => {
     }
 
     if (active === "notifications") {
+      const selected = selectedNotifOrder;
+
+      if (selected) {
+        const status = normalizeStatus(selected.status);
+        const next = getNextStatus(status);
+        const items = Array.isArray(selected.items) ? selected.items : [];
+
+        return (
+          <div className="admin-notification-detail">
+            <div className="admin-notification-detail-header">
+              <button
+                type="button"
+                className="admin-back-button"
+                onClick={() => {
+                  setSelectedNotifOrder(null);
+                  navigate("/admin");
+                }}
+              >
+                Back
+              </button>
+            </div>
+
+            <div className="admin-notification-detail-card">
+              <div className="admin-notification-detail-title">
+                <h2>Notification</h2>
+              </div>
+              <div className="admin-notification-detail-meta">
+                <p><strong>Order</strong>: #{String(selected._id).slice(-6)}</p>
+                <p><strong>Status</strong>: <span className={statusPillClass(status)}>{status}</span></p>
+                <p><strong>Paid</strong>: {selected.payment ? "Yes" : "No"}</p>
+              </div>
+            </div>
+
+            <div className="admin-order-detail-card">
+              <h2>Order Details</h2>
+              <div className="admin-order-detail-info">
+                <div className="admin-order-detail-row">
+                  <span>Amount</span>
+                  <span>${Number(selected.amount || 0).toFixed(2)}</span>
+                </div>
+                <div className="admin-order-detail-row">
+                  <span>Date</span>
+                  <span>{new Date(selected.date || selected.createdAt || Date.now()).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="admin-mark-read-button"
+                  onClick={() => navigate(`/admin/orders/${selected._id}`)}
+                >
+                  Open Order
+                </button>
+                {next && (
+                  <button
+                    type="button"
+                    className="admin-filter-btn"
+                    onClick={() => handleStatusUpdate(selected._id, next)}
+                  >
+                    Move to {next}
+                  </button>
+                )}
+              </div>
+
+              {items.length > 0 && (
+                <div className="admin-order-items">
+                  <h3>Items</h3>
+                  <div className="admin-order-items-list">
+                    {items.map((it, idx) => {
+                      const img = getImageSrc(it.image);
+                      return (
+                        <div className="admin-order-item" key={`${it._id || idx}`}
+                        >
+                          {img ? (
+                            <img className="admin-order-item-image" src={img} alt={it.name || "Item"} />
+                          ) : null}
+                          <div className="admin-order-item-info">
+                            <div className="admin-order-item-name">{it.name}</div>
+                            <div className="admin-order-item-price">x{Number(it.quantity || 1)} • ${Number(it.price || 0).toFixed(2)}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
       return (
         <>
           <h1>Notifications</h1>
-          <p>Notifications view is under construction.</p>
+
+          <div className="admin-notifications-filters">
+            <button
+              className={`admin-filter-btn ${notifFilter === "all" ? "admin-filter-active" : ""}`}
+              onClick={() => setNotifFilter("all")}
+            >
+              All ({adminTotalCount})
+            </button>
+            <button
+              className={`admin-filter-btn ${notifFilter === "unread" ? "admin-filter-active" : ""}`}
+              onClick={() => setNotifFilter("unread")}
+            >
+              Unread ({adminUnreadCount})
+            </button>
+            <button
+              className={`admin-filter-btn ${notifFilter === "read" ? "admin-filter-active" : ""}`}
+              onClick={() => setNotifFilter("read")}
+            >
+              Read ({adminReadCount})
+            </button>
+          </div>
+
+          {adminNotificationsFiltered.length === 0 ? (
+            <div className="admin-notifications-empty">No notifications.</div>
+          ) : (
+            <div className="admin-notifications-list">
+              {adminNotificationsFiltered.map((n) => (
+                <div
+                  key={`${n.role}-${n.id}-${n.dateLabel}`}
+                  className={`admin-notification-card ${!n.read ? "admin-notification-unread" : ""}`}
+                  onClick={async () => {
+                    dispatch(markNotificationRead({ id: n.id, role: "admin" }));
+                    const order = await fetchOrderDetail(n.id);
+                    if (order) setSelectedNotifOrder(order);
+                    navigate(`/admin/notifications/${n.id}`);
+                  }}
+                >
+                  <div className="admin-notification-card-header">
+                    <h3>{n.title}</h3>
+                    {!n.read && <span className="admin-notification-unread-dot" />}
+                  </div>
+                  <div className="admin-notification-card-body">
+                    <span className="admin-notification-date">{n.dateLabel}</span>
+                  </div>
+                  <div className="admin-notification-card-footer">
+                    <span>Order #{String(n.id).slice(-6)}</span>
+                    {n.status ? (
+                      <span className={statusPillClass(n.status)}>{normalizeStatus(n.status)}</span>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       );
     }
 
     if (active === "analytics") {
+      const paidOrders = orders.filter((o) => !!o.payment);
+      const revenue = paidOrders.reduce((sum, o) => sum + Number(o.amount || 0), 0);
+      const totalOrders = orders.length;
+      const paidCount = paidOrders.length;
+      const pendingCount = orders.filter((o) => normalizeStatus(o.status) === "Pending").length;
+      const avgOrder = totalOrders > 0 ? revenue / totalOrders : 0;
+
+      const statusCounts = STATUS_SEQUENCE.reduce((acc, s) => {
+        acc[s] = orders.filter((o) => normalizeStatus(o.status) === s).length;
+        return acc;
+      }, {});
+
+      const maxStatusCount = Math.max(1, ...Object.values(statusCounts));
+
+      const topItems = (() => {
+        const map = new Map();
+        orders.forEach((o) => {
+          const items = Array.isArray(o.items) ? o.items : [];
+          items.forEach((it) => {
+            const key = it.name || it._id;
+            if (!key) return;
+            const current = map.get(key) || { name: it.name || "Item", count: 0 };
+            current.count += Number(it.quantity || 1);
+            map.set(key, current);
+          });
+        });
+        return Array.from(map.values()).sort((a, b) => b.count - a.count).slice(0, 5);
+      })();
+
       return (
         <>
           <h1>Analytics</h1>
-          <p>Analytics view is under construction.</p>
+
+          <div className="admin-analytics-metrics">
+            <div className="admin-analytics-metric-card">
+              <div className="admin-analytics-metric-icon revenue">
+                <MdAttachMoney />
+              </div>
+              <div className="admin-analytics-metric-content">
+                <div className="admin-analytics-metric-label">Revenue (Paid)</div>
+                <div className="admin-analytics-metric-value">${revenue.toFixed(2)}</div>
+                <div className="admin-analytics-metric-sub">Paid orders only</div>
+              </div>
+            </div>
+            <div className="admin-analytics-metric-card">
+              <div className="admin-analytics-metric-icon paid">
+                <MdTaskAlt />
+              </div>
+              <div className="admin-analytics-metric-content">
+                <div className="admin-analytics-metric-label">Paid Orders</div>
+                <div className="admin-analytics-metric-value">{paidCount}</div>
+                <div className="admin-analytics-metric-sub">Out of {totalOrders}</div>
+              </div>
+            </div>
+            <div className="admin-analytics-metric-card">
+              <div className="admin-analytics-metric-icon pending">
+                <MdPendingActions />
+              </div>
+              <div className="admin-analytics-metric-content">
+                <div className="admin-analytics-metric-label">Pending</div>
+                <div className="admin-analytics-metric-value">{pendingCount}</div>
+                <div className="admin-analytics-metric-sub">Needs action</div>
+              </div>
+            </div>
+            <div className="admin-analytics-metric-card">
+              <div className="admin-analytics-metric-icon avg">
+                <MdTrendingUp />
+              </div>
+              <div className="admin-analytics-metric-content">
+                <div className="admin-analytics-metric-label">Avg Order</div>
+                <div className="admin-analytics-metric-value">${avgOrder.toFixed(2)}</div>
+                <div className="admin-analytics-metric-sub">Based on all orders</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="admin-analytics-charts">
+            <div className="admin-analytics-chart-card">
+              <h2>Orders by Status</h2>
+              <div className="admin-analytics-bar-chart">
+                {STATUS_SEQUENCE.map((s) => {
+                  const count = statusCounts[s] || 0;
+                  const height = Math.max(4, Math.round((count / maxStatusCount) * 150));
+                  return (
+                    <div key={s} className="admin-analytics-bar-wrapper">
+                      <div className="admin-analytics-bar-container">
+                        <div className="admin-analytics-bar" style={{ height }}>
+                          <span className="admin-analytics-bar-value">{count}</span>
+                        </div>
+                      </div>
+                      <div className="admin-analytics-bar-label">{s}</div>
+                      <div className="admin-analytics-bar-count">orders</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="admin-analytics-chart-card">
+              <h2>Top Items</h2>
+              <div className="admin-analytics-top-items">
+                {topItems.length === 0 ? (
+                  <div className="admin-dashboard-recent-empty">No order items yet.</div>
+                ) : (
+                  topItems.map((it) => (
+                    <div key={it.name} className="admin-analytics-top-item">
+                      <div className="admin-analytics-top-item-rank">#{topItems.indexOf(it) + 1}</div>
+                      <div>
+                        <div className="admin-analytics-top-item-name">{it.name}</div>
+                        <div className="admin-analytics-top-item-count">{it.count} sold</div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </>
       );
     }
@@ -625,72 +1138,82 @@ const Admin = () => {
     <div className="admin-layout">
       <header className="admin-navbar">
         <img className="admin-logo" src={assets.logo} alt="Logo" />
-        <button
-          type="button"
-          className="admin-nav-bell-wrapper"
-          onClick={() => setHeaderNotifOpen((prev) => !prev)}
-        >
-          <span className="admin-nav-bell-icon">
-            <MdNotificationsNone />
-            {adminUnreadCount > 0 && (
-              <span className="admin-nav-bell-badge">
-                {adminUnreadCount > 9 ? "9+" : adminUnreadCount}
+
+        <div className="admin-navbar-right">
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              className="admin-nav-bell-wrapper"
+              onClick={() => setHeaderNotifOpen((prev) => !prev)}
+            >
+              <span className="admin-nav-bell-icon">
+                <MdNotificationsNone />
+                {adminUnreadCount > 0 && (
+                  <span className="admin-nav-bell-badge">
+                    {adminUnreadCount}
+                  </span>
+                )}
               </span>
-            )}
-          </span>
-        </button>
-        {headerNotifOpen && adminUnreadNotifications.length > 0 && (
-          <div className="admin-nav-bell-menu">
-            <ul>
-              {adminUnreadNotifications.slice(0, 6).map((n) => {
-                const relatedOrder = orders.find((o) => o._id === n.id) || null;
-                return (
-                  <li
-                    key={`header-${n.role}-${n.id}-${n.dateLabel}`}
-                    className="admin-nav-bell-item"
-                    onClick={() => {
-                      dispatch(markNotificationRead({ id: n.id, role: "admin" }));
-                      setHeaderNotifOpen(false);
-                      if (relatedOrder) {
-                        setSelectedNotifOrder(relatedOrder);
-                      }
-                      navigate(`/admin/notifications/${n.id}`);
-                    }}
-                  >
-                    <div className="admin-nav-bell-item-main">
-                      <span className="admin-nav-bell-item-title">{n.title}</span>
-                      {n.status && (
-                        <span className={`admin-dashboard-status-pill status-${(n.status || "Pending").toLowerCase()}`}>
-                          {n.status}
-                        </span>
-                      )}
-                    </div>
-                    <div className="admin-nav-bell-item-meta">{n.dateLabel}</div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-        <div className="admin-avatar-section">
-          <div
-            className="admin-avatar"
-            onClick={() => setAvatarMenuOpen((prev) => !prev)}
-          >
-            {user && user.avatar ? (
-              <img src={user.avatar} alt={user.name || "Admin"} />
-            ) : (
-              <MdPerson />
+            </button>
+
+            {headerNotifOpen && adminUnreadNotifications.length > 0 && (
+              <div className="admin-nav-bell-menu">
+                <div className="admin-nav-bell-menu-header">Unread</div>
+                <ul>
+                  {adminUnreadNotifications.slice(0, 8).map((n) => {
+                    const relatedOrder = orders.find((o) => o._id === n.id) || null;
+                    return (
+                      <li
+                        key={`header-${n.role}-${n.id}-${n.dateLabel}`}
+                        className="admin-nav-bell-item"
+                        onClick={async () => {
+                          dispatch(markNotificationRead({ id: n.id, role: "admin" }));
+                          setHeaderNotifOpen(false);
+
+                          const order = relatedOrder || (await fetchOrderDetail(n.id));
+                          if (order) {
+                            setSelectedNotifOrder(order);
+                          }
+
+                          navigate(`/admin/notifications/${n.id}`);
+                        }}
+                      >
+                        <div className="admin-nav-bell-item-main">
+                          <span className="admin-nav-bell-item-title">{n.title}</span>
+                          {n.status && (
+                            <span className={statusPillClass(n.status)}>
+                              {normalizeStatus(n.status)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="admin-nav-bell-item-meta">{n.dateLabel}</div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
           </div>
-          {avatarMenuOpen && (
-            <div className="admin-avatar-menu">
-              <button onClick={() => { setAvatarMenuOpen(false); navigate("/settings"); }}>Settings</button>
-              <button onClick={handleLogout}>Logout</button>
+
+          <div className="admin-avatar-section">
+            <div
+              className="admin-avatar"
+              onClick={() => setAvatarMenuOpen((prev) => !prev)}
+            >
+              {user && user.avatar ? (
+                <img src={getImageSrc(user.avatar)} alt={user.name || "Admin"} />
+              ) : (
+                <MdPerson />
+              )}
             </div>
-          )}
+            {avatarMenuOpen && (
+              <div className="admin-avatar-menu">
+                <button onClick={() => { setAvatarMenuOpen(false); navigate("/settings"); }}>Settings</button>
+                <button onClick={handleLogout}>Logout</button>
+              </div>
+            )}
+          </div>
         </div>
-        <span className="admin-nav-bell-label">Dashboard</span>
       </header>
 
       <div className="admin-main">

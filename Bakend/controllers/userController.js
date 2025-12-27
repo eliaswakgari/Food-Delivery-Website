@@ -256,14 +256,14 @@ const getProfile = async (req, res) => {
   }
 };
 
-// Update current user's profile (name, optional password, avatar URL)
+// Update current user's profile (name, avatar URL) - separate from password
 const updateProfile = async (req, res) => {
   const userId = req.user && req.user.id;
   if (!userId) {
     return res.status(401).json({ success: false, message: "Not authorized" });
   }
 
-  const { name, password, avatar, currentPassword } = req.body;
+  const { name, avatar } = req.body;
 
   try {
     const user = await userModel.findById(userId);
@@ -271,31 +271,12 @@ const updateProfile = async (req, res) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    if (name) {
-      user.name = name;
+    if (name && name.trim()) {
+      user.name = name.trim();
     }
 
-    // If user wants to change password, they must provide the current password
-    if (password) {
-      if (!currentPassword) {
-        return res.status(400).json({ success: false, message: "Current password is required to set a new password" });
-      }
-
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
-      if (!isMatch) {
-        return res.status(401).json({ success: false, message: "Current password is incorrect" });
-      }
-
-      if (password.length < 8) {
-        return res.status(400).json({ success: false, message: "Please enter strong password" });
-      }
-
-      const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(password, salt);
-    }
-
-    if (avatar) {
-      user.avatar = avatar;
+    if (avatar !== undefined) {
+      user.avatar = avatar || null;
     }
 
     await user.save();
@@ -309,6 +290,45 @@ const updateProfile = async (req, res) => {
     };
 
     return res.status(200).json({ success: true, user: userData });
+  } catch (error) {
+    console.log(error.message);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Update password separately
+const updatePassword = async (req, res) => {
+  const userId = req.user && req.user.id;
+  if (!userId) {
+    return res.status(401).json({ success: false, message: "Not authorized" });
+  }
+
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ success: false, message: "Current password and new password are required" });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ success: false, message: "Please enter strong password (minimum 8 characters)" });
+  }
+
+  try {
+    const user = await userModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: "Current password is incorrect" });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    return res.status(200).json({ success: true, message: "Password updated successfully" });
   } catch (error) {
     console.log(error.message);
     return res.status(500).json({ success: false, message: "Server error" });
@@ -373,4 +393,4 @@ const googleOAuthCallback = (req, res) => {
   }
 };
 
-module.exports = { loginUser, RegisterUser, promoteToAdmin, forgotPassword, resetPassword, getProfile, updateProfile, logoutUser, googleOAuthCallback };
+module.exports = { loginUser, RegisterUser, promoteToAdmin, forgotPassword, resetPassword, getProfile, updateProfile, updatePassword, logoutUser, googleOAuthCallback };

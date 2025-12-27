@@ -60,7 +60,7 @@ jobs:
       # Deploy Backend (Render)
       # ----------------------
       - name: Deploy backend to Render
-        if: ${{ secrets.RENDER_DEPLOY_HOOK }}  # ✅ Fixed
+        if: ${{ secrets.RENDER_DEPLOY_HOOK }}
         run: |
           curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}" \
             -H "Content-Type: application/json" \
@@ -70,12 +70,6 @@ jobs:
       # ----------------------
       # Deploy Frontend (Vercel)
       # ----------------------
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
-
-      - name: Deploy frontend to Vercel
-        if: ${{ secrets.VERCEL_TOKEN }}  # ✅ Fixed
-        working-directory: frontend
-        run: |
-          vercel --prod --yes --token="${{ secrets.VERCEL_TOKEN }}" || echo "Vercel deployment failed"
-        continue-on-error: true
+      # ✅ No Vercel token needed if GitHub auto-deploy is enabled
+      - name: Vercel auto-deploy
+        run: echo "Vercel deployment is automatic via GitHub integration"
