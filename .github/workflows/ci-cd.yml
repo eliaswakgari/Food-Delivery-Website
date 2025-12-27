@@ -54,7 +54,7 @@ jobs:
       # Deploy Backend (Render)
       # ======================
       - name: Deploy backend to Render
-        if: ${{ secrets.RENDER_DEPLOY_HOOK != '' }}
+        if: ${{ secrets.RENDER_DEPLOY_HOOK }}
         run: |
           curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}" \
             -H "Content-Type: application/json" \
@@ -68,7 +68,7 @@ jobs:
         run: npm install -g vercel@latest
 
       - name: Deploy frontend to Vercel
-        if: ${{ secrets.VERCEL_TOKEN != '' }}
+        if: ${{ secrets.VERCEL_TOKEN }}
         working-directory: frontend
         run: |
           vercel --prod --yes --token=${{ secrets.VERCEL_TOKEN }} || echo "Vercel deployment failed"
