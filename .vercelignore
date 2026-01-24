@@ -1,5 +1,2 @@
 Bakend/
-node_modules/
-.git/
-.env
 *.log
